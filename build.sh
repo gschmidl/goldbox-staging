@@ -10,4 +10,5 @@ mkdir -p build
     -lwinhttp -liphlpapi -static-libgcc -Wl,--enable-stdcall-fixup -s
 "$CC" -O2 -Wall -o build/dlltest.exe tests/dlltest.c \
     -Wl,--image-base=0x400000 -Wl,--disable-dynamicbase -static-libgcc
-echo "built build/dbxapi32.dll and build/dlltest.exe"
+"$CC" -O2 -Wall -o build/busytest.exe tests/busytest.c -static-libgcc
+echo "built build/dbxapi32.dll, build/dlltest.exe and build/busytest.exe"

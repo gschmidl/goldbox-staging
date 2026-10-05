@@ -118,6 +118,8 @@ def main():
             "source/src/dbxapi32.c": "src/dbxapi32.c",
             "source/src/dbxapi32.def": "src/dbxapi32.def",
             "source/tests/dlltest.c": "tests/dlltest.c",
+            "source/tests/busytest.c": "tests/busytest.c",
+            "source/tests/busytest.py": "tests/busytest.py",
             "source/tests/porttest.ps1": "tests/porttest.ps1",
         }
         for t in ("patch_tools.py", "fix_gamedat.py", "gen_def.py", "gen_web_tables.py", "make_release.py"):

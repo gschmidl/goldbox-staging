@@ -302,6 +302,13 @@ same path as the GBC and ASE teleports tested above.
 
 ## Notes
 
+- While a DOSBox window is dragged, Staging's main loop stands still, and the
+  API answers memory requests after 250 ms with a 500 "timeout" (it does the
+  same whenever the main loop doesn't take a request in time). The DLL then
+  serves its cached copy of the memory, which is current because the
+  emulation stands still too, asks again at most once a second, and keeps the
+  connection. It tells this answer apart from a read past the end of the RAM
+  ("exceeds emulated memory size"), which also gives the RAM's size.
 - Each DOSBox is served through its own API port, so several Staging instances
   work if they use different ports. One that can't open its port (another
   instance has it) has no API and gets the real calls, which don't reach a
@@ -327,6 +334,10 @@ The release zip carries the sources in `source/`.
   addresses, IPv6, a pinned `port=`, webserver off) and runs `dlltest.exe`
   against each. The folder needs copies of `dlltest.exe` and `dbxapi32.dll`;
   the script writes its config and `dbxapi32.ini` there.
+- `python tests/busytest.py build` checks the DLL (with `build/busytest.exe`)
+  against a fake API that turns busy, as Staging's does while its window is
+  dragged: no read may fail while it is busy, and after a failure the DLL has
+  to attach again with the right RAM size, not one taken from busy answers.
 - `tools/patch_tools.py` (executables) and `tools/fix_gamedat.py` (Game.dat)
   do the actual patching from the original builds; they need `pefile`.
   `tools/make_release.py --gbc <GBC 2.65 folder> --ase <ASE.exe builds> --ase3

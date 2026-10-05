@@ -14,6 +14,10 @@
  * RAM_WINDOW (the start of the tools' default search range). Any other
  * process, e.g. a vanilla DOSBox 0.74, gets the real calls.
  *
+ * While DOSBox's main loop stands still (its window being dragged), the API
+ * answers memory requests with a timeout; the emulation stands still too, so
+ * reads get the cached copy meanwhile, and the connection is kept.
+ *
  * Settings: dbxapi32.ini next to the DLL, section [dbxapi]:
  *   port=0  (0: find the API port; else only this port)  cache_ms=40  log=0
  *   trace=0 (1: log every read/write to dbxapi32.trace)
@@ -41,6 +45,16 @@
 /* How long a decision about which process the API serves is reused. */
 #define SERVED_CACHE_MS 1000
 
+/* After a "busy" answer (DOSBox's main loop didn't take the request within
+ * the API's 250 ms), the API isn't asked again for this long: reads get the
+ * cached copy, or fail if there is none. */
+#define BUSY_MS 1000
+
+/* What a memory request came to. Staging answers a failed one with 500 and
+ * {"error": ...}: "...timeout" when its main loop didn't take the command
+ * in time (busy), "... exceeds emulated memory size (N bytes)" past the end. */
+enum { API_OK, API_BUSY, API_PAST_END, API_FAILED };
+
 /* Staging's default API ports, tried first: 0.83 used 8086, 0.84 8080. */
 static const int usual_ports[] = {8086, 8080};
 
@@ -57,6 +71,10 @@ static FILE *trace_file;
 
 static HINTERNET h_session, h_connect;
 static int conn_port, conn_v6; /* where h_connect points */
+static char http_err[256];     /* body of the last error response */
+static DWORD busy_tick;        /* when the API last answered "busy" */
+static int busy_seen;          /* busy_tick is set */
+static int read_busy;          /* the last block read found the API busy */
 
 static DWORD api_pid;      /* process attached through the API; 0 = none */
 static int api_port, api_v6; /* where its API answers (kept after detach) */
@@ -260,8 +278,9 @@ static int http_open(int port, int v6)
 }
 
 /* Performs a request to the API at port/v6 and returns the HTTP status (0
- * on transport failure). Up to out_max bytes of the response body go to
- * out. `quick` uses short timeouts (for probing ports). */
+ * on transport failure). Up to out_max bytes of a 200 response's body go to
+ * out, the start of any other's to http_err. `quick` uses short timeouts
+ * (for probing ports). */
 static DWORD http_request(int port, int v6, const WCHAR *verb, const WCHAR *path,
                           const void *body, DWORD body_len, void *out,
                           DWORD out_max, DWORD *out_len, int quick)
@@ -300,19 +319,26 @@ static DWORD http_request(int port, int v6, const WCHAR *verb, const WCHAR *path
 	WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
 	                    WINHTTP_HEADER_NAME_BY_INDEX, &status, &sz,
 	                    WINHTTP_NO_HEADER_INDEX);
-	DWORD got = 0;
+	DWORD got = 0, err_got = 0;
 	for (;;) {
 		char scratch[4096];
 		DWORD avail = 0, n = 0;
 		if (!WinHttpQueryDataAvailable(req, &avail) || avail == 0)
 			break;
-		if (out && got < out_max) {
+		if (status == 200 && out && got < out_max) {
 			DWORD want = out_max - got;
 			if (want > avail)
 				want = avail;
 			if (!WinHttpReadData(req, (char *)out + got, want, &n))
 				break;
 			got += n;
+		} else if (status != 200 && err_got < sizeof http_err - 1) {
+			DWORD want = sizeof http_err - 1 - err_got;
+			if (want > avail)
+				want = avail;
+			if (!WinHttpReadData(req, http_err + err_got, want, &n))
+				break;
+			err_got += n;
 		} else {
 			if (avail > sizeof scratch)
 				avail = sizeof scratch;
@@ -320,10 +346,23 @@ static DWORD http_request(int port, int v6, const WCHAR *verb, const WCHAR *path
 				break;
 		}
 	}
+	http_err[err_got] = 0;
 	if (out_len)
 		*out_len = got;
 	WinHttpCloseHandle(req);
 	return status;
+}
+
+/* What a memory request's status (and http_err) come to. */
+static int api_result(DWORD status, int complete)
+{
+	if (status == 200)
+		return complete ? API_OK : API_FAILED;
+	if (status == 500 && strstr(http_err, "timeout"))
+		return API_BUSY;
+	if (status == 500 && strstr(http_err, "exceeds emulated memory size"))
+		return API_PAST_END;
+	return API_FAILED;
 }
 
 static int api_read(DWORD linear, void *buf, DWORD len)
@@ -332,17 +371,17 @@ static int api_read(DWORD linear, void *buf, DWORD len)
 	swprintf(path, 96, L"/api/v1/memory/0x%lx/%lu", (unsigned long)linear,
 	         (unsigned long)len);
 	DWORD got = 0;
-	return http_request(api_port, api_v6, L"GET", path, NULL, 0, buf, len,
-	                    &got, 0) == 200 &&
-	       got == len;
+	DWORD status = http_request(api_port, api_v6, L"GET", path, NULL, 0, buf,
+	                            len, &got, 0);
+	return api_result(status, got == len);
 }
 
 static int api_write(DWORD linear, const void *buf, DWORD len)
 {
 	WCHAR path[64];
 	swprintf(path, 64, L"/api/v1/memory/0x%lx", (unsigned long)linear);
-	return http_request(api_port, api_v6, L"PUT", path, buf, len, NULL, 0,
-	                    NULL, 0) == 200;
+	return api_result(http_request(api_port, api_v6, L"PUT", path, buf, len,
+	                               NULL, 0, NULL, 0), 1);
 }
 
 /* Is the DOSBox Staging HTTP API at this port? */
@@ -400,30 +439,49 @@ static void detach(void)
 	api_pid = 0;
 	api_mem_size = 0;
 	decided_pid = 0;
+	busy_seen = 0;
 	drop_cache();
 }
 
-/* Emulated RAM size: the API rejects reads past its end. */
+/* Emulated RAM size, 0 while the API is busy or failing. A read past the end
+ * names the size ("... exceeds emulated memory size (N bytes)"); without
+ * that, it's bisected with reads that either succeed or go past the end
+ * (never taking a busy answer for the end). */
 static DWORD probe_mem_size(void)
 {
 	unsigned char b;
-	if (!api_read(0, &b, 1))
+	if (api_read(0, &b, 1) != API_OK)
 		return 0;
+	int r = api_read(0x7FFFFFFEu, &b, 1);
+	if (r == API_OK)
+		return 0x7FFFFFFFu;
+	if (r != API_PAST_END)
+		return 0;
+	const char *p = strstr(http_err, "memory size (");
+	unsigned long named = p ? strtoul(p + 13, NULL, 10) : 0;
+	if (named >= (1u << 20) && named <= 0x7FFFFFFFu)
+		return (DWORD)named;
+
 	DWORD lo = 1, hi = 0; /* lo: known readable size */
 	for (DWORD s = 1u << 20; s && s <= 0x80000000u; s <<= 1) {
-		if (api_read(s - 1, &b, 1))
+		r = api_read(s - 1, &b, 1);
+		if (r == API_OK)
 			lo = s;
-		else {
+		else if (r == API_PAST_END) {
 			hi = s;
 			break;
-		}
+		} else
+			return 0;
 	}
 	while (hi && hi - lo > 1) { /* smallest unreadable size in (lo, hi] */
 		DWORD mid = lo + (hi - lo) / 2;
-		if (api_read(mid - 1, &b, 1))
+		r = api_read(mid - 1, &b, 1);
+		if (r == API_OK)
 			lo = mid;
-		else
+		else if (r == API_PAST_END)
 			hi = mid;
+		else
+			return 0;
 	}
 	return lo;
 }
@@ -545,24 +603,37 @@ static int in_window(DWORD addr, DWORD len)
 	return off < api_mem_size && len <= api_mem_size - off;
 }
 
+/* A block of the emulated RAM, from the cache while it's fresh or while the
+ * API is busy (DOSBox stands still then, so the cached copy is current);
+ * NULL if it can't be had (read_busy says whether the API was just busy). */
 static Block *get_block(DWORD i)
 {
 	Block *b = &blocks[i];
 	DWORD now = GetTickCount();
 	if (b->valid && now - b->tick <= cfg_cache_ms)
 		return b;
+	if (busy_seen && now - busy_tick <= BUSY_MS) {
+		read_busy = 1;
+		return b->valid ? b : NULL;
+	}
 	if (!b->data && !(b->data = malloc(BLOCK_SIZE)))
 		return NULL;
 	DWORD start = i << BLOCK_SHIFT;
 	DWORD len = api_mem_size - start < BLOCK_SIZE ? api_mem_size - start
 	                                              : BLOCK_SIZE;
-	if (!api_read(start, b->data, len)) {
-		b->valid = 0;
-		return NULL;
+	int r = api_read(start, b->data, len);
+	if (r == API_OK) {
+		b->valid = 1;
+		b->tick = now;
+		return b;
 	}
-	b->valid = 1;
-	b->tick = now;
-	return b;
+	if (r == API_BUSY) {
+		read_busy = busy_seen = 1;
+		busy_tick = GetTickCount();
+		return b->valid ? b : NULL;
+	}
+	b->valid = 0;
+	return NULL;
 }
 
 /* ---- the redirected calls ------------------------------------------------ */
@@ -594,6 +665,7 @@ BOOL WINAPI Shim_ReadProcessMemory(HANDLE process, LPCVOID address,
 	BOOL ok = FALSE;
 	if (read)
 		*read = 0;
+	read_busy = 0;
 	if (!ensure_attached()) {
 		/* the API doesn't answer (DOSBox closed or busy) */
 	} else if (size == 0) {
@@ -616,7 +688,7 @@ BOOL WINAPI Shim_ReadProcessMemory(HANDLE process, LPCVOID address,
 			memcpy((char *)buffer + done, b->data + in_blk, n);
 			done += n;
 		}
-		if (!ok) /* the API stopped answering */
+		if (!ok && !read_busy) /* the API stopped answering */
 			detach();
 	}
 	if (ok && read)
@@ -646,9 +718,10 @@ BOOL WINAPI Shim_WriteProcessMemory(HANDLE process, LPVOID address,
 	} else if (in_window(addr, (DWORD)size)) {
 		DWORD off = addr - RAM_WINDOW;
 		trace('W', off, buffer, (DWORD)size);
-		ok = api_write(off, buffer, (DWORD)size);
+		int r = api_write(off, buffer, (DWORD)size);
+		ok = r == API_OK;
 		dbg("write 0x%lx (+%lu) -> %s", off, (unsigned long)size,
-		    ok ? "ok" : "FAILED");
+		    ok ? "ok" : r == API_BUSY ? "FAILED (busy)" : "FAILED");
 		/* keep cached blocks coherent */
 		for (DWORD done = 0; ok && done < size;) {
 			DWORD pos = off + done;
