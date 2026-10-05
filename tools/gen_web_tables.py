@@ -27,7 +27,10 @@ import struct
 import sys
 from pathlib import Path
 
-WEB = Path(__file__).resolve().parent.parent / 'web'
+# the repo's web/, or the release zip's (the script is in source/tools there)
+HERE = Path(__file__).resolve().parent
+WEB = next((d for d in (HERE.parent / 'web', HERE.parent.parent / 'web') if (d / 'gbc.html').is_file()),
+           HERE.parent / 'web')
 ROW = re.compile(r'^\s+([0-9A-F]{3})(?:\s*-\s*([0-9A-F]{3}))?\s+\d+(?:\s*-\s*\d+)?\s+(\d+)\s+(.+?)\s*$')
 FIELD_KEYS = {
     'name length': 'nameLen', 'name': 'name', 'str current': 'str', 'int current': 'int', 'wis current': 'wis',

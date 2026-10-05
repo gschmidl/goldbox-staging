@@ -17,7 +17,9 @@ ASE3 0.12: Eye of the Beholder 1-3) and `ultimapper5.html` (Ultimapper 5) do
 what the tools do, one page per tool, each in its own window: HUD, automap,
 editors, journals, quickfight and the rest. They read and write the game's
 memory through `/api/v1/memory`, so DOSBox Staging has to serve them: its API
-sends no CORS headers, so a page from anywhere else can't use it.
+sends no CORS headers, so a page from anywhere else can't use it. The release
+zip, on the [releases page](https://github.com/gschmidl/goldbox-staging/releases),
+has them in `web\` and the eXoDOS patch in `exo\`.
 
 Of the tools' files, the pages carry only small tables generated from them
 (memory offsets, ID patterns, record layouts, spell effect names; see

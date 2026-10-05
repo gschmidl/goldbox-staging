@@ -3,7 +3,8 @@
 
 Maintainer tool: patches the original builds with patch_tools.py and
 fix_gamedat.py (both need pefile), records the byte changes per build in
-../patches.json for patch.py, and optionally builds the release zip.
+../patches.json for patch.py, and optionally builds the release zip (with
+the companion pages in web/ and the eXoDOS patch in exo/).
 
   --gbc   a GBC 2.65 folder (GBC.exe, GBC_Audio.exe, ECL_Monitor.exe,
           FRUA_Tool.exe and Games\\...\\Game.dat)
@@ -110,13 +111,16 @@ def main():
             "README.md": "README.md", "LICENSE": "LICENSE", "patch.py": "patch.py",
             "patches.json": "patches.json", "dbxapi32.dll": "build/dbxapi32.dll",
             "gbc_staging.conf": "conf/gbc_staging.conf",
+            "web/gbc.html": "web/gbc.html", "web/ase.html": "web/ase.html",
+            "web/ultimapper5.html": "web/ultimapper5.html",
+            "exo/patch_exo.py": "exo/patch_exo.py",
             "source/build.sh": "build.sh",
             "source/src/dbxapi32.c": "src/dbxapi32.c",
             "source/src/dbxapi32.def": "src/dbxapi32.def",
             "source/tests/dlltest.c": "tests/dlltest.c",
             "source/tests/porttest.ps1": "tests/porttest.ps1",
         }
-        for t in ("patch_tools.py", "fix_gamedat.py", "gen_def.py", "make_release.py"):
+        for t in ("patch_tools.py", "fix_gamedat.py", "gen_def.py", "gen_web_tables.py", "make_release.py"):
             content[f"source/tools/{t}"] = f"tools/{t}"
         with zipfile.ZipFile(args.zip, "w", zipfile.ZIP_DEFLATED) as z:
             for arc, src in content.items():
