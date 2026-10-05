@@ -1,0 +1,1853 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ultimapper 5</title>
+<style>
+:root {
+  --bg: #000; --panel: #101010; --line: #2c2c2c; --text: #dcdcdc; --dim: #5c5c5c;
+  --green: #0a6a0a; --red: #7c0606; --xp: #b5700f; --hl: #f2e05a; --menu: #1c1c1c; --sel: #2c4a78;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 13px/1.35 Tahoma, Verdana, "Segoe UI", system-ui, sans-serif; }
+#app { display: flex; flex-direction: column; height: 100vh; }
+#bar { display: flex; align-items: center; gap: 8px; padding: 3px 8px; background: #161616;
+  border-bottom: 1px solid var(--line); white-space: nowrap; min-height: 28px; }
+#title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.chip { padding: 0 8px; border-radius: 9px; background: #333; font-size: 12px; }
+.chip.ok { background: #0b4d0b; } .chip.bad { background: #6a1010; } .chip.warn { background: #6a5410; }
+button, select, input { background: #222; color: var(--text); border: 1px solid #484848; border-radius: 3px;
+  padding: 2px 8px; font: inherit; }
+button { cursor: pointer; } button:hover { background: #333; }
+input[type=number] { width: 70px; }
+#hud { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)) 92px; padding: 6px 4px;
+  border-bottom: 2px solid #333; background: #000; }
+#hud.hidden { display: none; }
+.pc { padding: 0 8px; border-right: 1px solid #333; min-width: 0; }
+.pc .nm { background: var(--green); text-align: center; text-transform: uppercase; font-size: 12px;
+  padding: 1px 0; margin-bottom: 4px; overflow: hidden; white-space: nowrap; cursor: pointer; }
+.pc .nm.P { background: #5a7a10; } .pc .nm.S { background: #2c3c80; } .pc .nm.D { background: #444; }
+.pc .nm.C { background: #7a3c8a; } .pc .nm.R { background: #6a4a2a; }
+.pc .rw { display: flex; justify-content: space-between; gap: 4px; font-size: 11px; height: 16px; }
+.pc .rw span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.pc .rw .e { color: var(--dim); }
+.pc .xp { height: 3px; background: #2a2a2a; margin: 6px 0 7px; } .pc .xp i { display: block; height: 100%; background: var(--xp); }
+.pc .hp { position: relative; height: 18px; background: #262626; text-align: center; font-size: 12px; }
+.pc .hp i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--green); }
+.pc .hp i.low { background: var(--red); }
+.pc .hp span { position: relative; line-height: 18px; }
+#side { text-align: center; font-size: 11px; line-height: 1.25; cursor: pointer; }
+#side b { display: block; font-size: 13px; font-weight: normal; margin-bottom: 4px; }
+#mapwrap { position: relative; flex: 1; overflow: auto; background: #000; }
+#map { display: block; margin: 0 auto; }
+#tip { position: fixed; pointer-events: none; background: #222e; border: 1px solid #555; padding: 2px 6px;
+  font-size: 12px; display: none; z-index: 30; white-space: pre; }
+#msg { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); max-width: 560px;
+  text-align: center; color: #bbb; }
+#msg h2 { font-weight: normal; color: #eee; }
+.menu { position: fixed; background: var(--menu); border: 1px solid #555; min-width: 230px; padding: 3px 0;
+  z-index: 50; box-shadow: 3px 3px 10px #000c; user-select: none; }
+.menu .mi { padding: 3px 22px 3px 24px; position: relative; display: flex; justify-content: space-between;
+  gap: 24px; cursor: default; white-space: nowrap; }
+.menu .mi:hover, .menu .mi.open { background: var(--sel); }
+.menu .mi.dis { color: var(--dim); }
+.menu .mi.chk::before { content: "\2713"; position: absolute; left: 7px; }
+.menu .mi.sub::after { content: "\25B8"; position: absolute; right: 8px; }
+.menu .mi .k { color: #999; }
+.menu .sep { height: 1px; background: #444; margin: 3px 0; }
+.dlg { position: fixed; z-index: 40; background: #121212; border: 1px solid #555; box-shadow: 4px 4px 14px #000c;
+  display: flex; flex-direction: column; max-height: 92vh; }
+.dlg header { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: #1f1f1f; cursor: move;
+  user-select: none; border-bottom: 1px solid #333; }
+.dlg header .t { flex: 1; }
+.dlg .body { padding: 8px 10px; overflow: auto; }
+.list { border-collapse: collapse; width: 100%; font-size: 12px; }
+.list td, .list th { padding: 1px 6px; text-align: left; white-space: nowrap; }
+.list th { color: #aaa; font-weight: normal; border-bottom: 1px solid #333; position: sticky; top: 0; background: #121212; }
+.list tr.sel td { background: var(--sel); }
+.list tr.na td { color: var(--dim); }
+.list tr:hover td { background: #1d2a3d; }
+.n { text-align: right !important; }
+.list.spells { font: 11px Verdana, Tahoma, sans-serif; }
+.list.spells th { background: #333; color: #999; font-size: 10px; }
+.list.spells .c { text-align: center; }
+.list.spells tr.counts td { color: #ddd; padding: 6px 6px 8px; }
+.list.spells tr.known td { color: #f0f0f0; }
+.list.spells tr.na td { color: #5c5c5c; }
+.list.spells td.mix, .list.spells td.got { color: #3cb03c !important; }
+.list.spells td.miss { color: #c03030 !important; }
+.list.spells tr { cursor: pointer; }
+.inv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 24px; font: 11px Verdana, Tahoma, sans-serif;
+  color: #6a6a6a; padding: 4px 8px 10px; }
+.inv h4 { color: #ddd; font-size: 11px; font-weight: normal; margin: 16px 0 8px; }
+.inv div > div { display: flex; gap: 8px; line-height: 18px; }
+.inv .n { width: 18px; text-align: right; }
+.inv .got { color: #ddd; }
+.inv .note { color: #555; }
+#log { font: 12px/1.3 Consolas, monospace; white-space: pre-wrap; }
+.grid2 { display: grid; grid-template-columns: auto auto; gap: 4px 10px; align-items: center; }
+.ed { display: grid; grid-template-columns: 220px 1fr; gap: 10px; }
+.ed .chars button { display: block; width: 100%; text-align: left; margin-bottom: 3px; }
+.ed .chars button.sel { background: var(--sel); }
+.ed label { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 3px; }
+.muted { color: #888; }
+.hidden { display: none !important; }
+a { color: #8ab4f8; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <span id="title">Ultimapper 5</span>
+    <span id="qf" class="chip hidden">Quickfight</span>
+    <span id="dbg" class="chip warn hidden">Debug</span>
+    <span id="conn" class="chip">connecting</span>
+    <button id="menuBtn" title="Menu (or right-click the map)">&#9776;</button>
+  </div>
+  <div id="hud"></div>
+  <div id="mapwrap">
+    <canvas id="map" width="512" height="512"></canvas>
+    <div id="msg"></div>
+  </div>
+</div>
+<div id="tip"></div>
+<input id="folderInput" type="file" webkitdirectory multiple class="hidden">
+
+<script>
+'use strict';
+/* Ultimapper 5 for DOSBox Staging - a rewrite of Joonas Hirvonen's Ultimapper 5
+ * (Release 4) as a web page. It reads and writes Ultima V's memory through
+ * DOSBox Staging's HTTP API (/api/v1/memory), which also serves this page.
+ *
+ * Ultima V's data segment is DATA.OVL: its "MS Run-Time Library - Copyright"
+ * string sits at DS:0018, the in-memory SAVED.GAM image at DS:55B6, the
+ * current 32x32 map (or the 2x2 overworld chunks) at DS:6618 and the 11x11
+ * view window (32-byte rows, FF = not visible) at DS:AB12. */
+
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, props = {}, ...kids) => {
+  const e = Object.assign(document.createElement(tag), props);
+  for (const k of kids) e.append(k);
+  return e;
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const hex = (n, w = 4) => n.toString(16).toUpperCase().padStart(w, '0');
+const pad3 = n => String(n).padStart(3, '0');
+
+/* ---------------------------------------------------------------- API */
+
+const Api = {
+  async read(addr, len) {
+    const r = await fetch(`/api/v1/memory/${addr}/${len}`,
+      { headers: { Accept: 'application/octet-stream' }, cache: 'no-store' });
+    if (!r.ok) throw new Error(`read ${hex(addr, 6)}: HTTP ${r.status}`);
+    return new Uint8Array(await r.arrayBuffer());
+  },
+  async write(addr, bytes) {
+    const r = await fetch(`/api/v1/memory/${addr}`, { method: 'PUT',
+      headers: { 'Content-Type': 'application/octet-stream' }, body: bytes });
+    if (!r.ok) throw new Error(`write ${hex(addr, 6)}: HTTP ${r.status}`);
+  },
+  async info() {
+    const r = await fetch('/api/v1/dosbox/info', { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  },
+  async memSize() {
+    let lo = 1 << 20, hi = 2 ** 32;
+    while (hi - lo > 4096) {
+      const mid = Math.floor((lo + hi) / 2);
+      try { await this.read(mid - 1, 1); lo = mid; } catch { hi = mid; }
+    }
+    return lo;
+  },
+};
+
+/* ------------------------------------------------- browser storage */
+
+const DB = {
+  db: null,
+  open() {
+    return this.db ??= new Promise((res, rej) => {
+      const q = indexedDB.open('ultimapper5', 1);
+      q.onupgradeneeded = () => { q.result.createObjectStore('files'); q.result.createObjectStore('kv'); };
+      q.onsuccess = () => res(q.result);
+      q.onerror = () => rej(q.error);
+    });
+  },
+  async op(store, mode, fn) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const q = fn(db.transaction(store, mode).objectStore(store));
+      q.onsuccess = () => res(q.result);
+      q.onerror = () => rej(q.error);
+    });
+  },
+  get: (s, k) => DB.op(s, 'readonly', o => o.get(k)),
+  put: (s, k, v) => DB.op(s, 'readwrite', o => o.put(v, k)),
+  del: (s, k) => DB.op(s, 'readwrite', o => o.delete(k)),
+  keys: s => DB.op(s, 'readonly', o => o.getAllKeys()),
+};
+
+const Settings = {
+  v: { worldExplored: true, underworldExplored: false, townsExplored: true, dungeonsExplored: false,   // the original's defaults
+       peerExplore: true, worldTitles: true, underworldTitles: false, npcNames: true, partyLocation: true,
+       autoLevelUp: false, qfInterval: 400, qfAim: true, debug: false, zoom: 0, hud: true },
+  load() { try { Object.assign(this.v, JSON.parse(localStorage.getItem('um5.settings') || '{}')); } catch {} },
+  save() { try { localStorage.setItem('um5.settings', JSON.stringify(this.v)); } catch {} },
+};
+
+/* ------------------------------------------------------ game files */
+
+const DATA_FILES = ['TILES.16', 'BRIT.DAT', 'UNDER.DAT', 'TOWNE.DAT', 'DWELLING.DAT', 'CASTLE.DAT',
+  'KEEP.DAT', 'DUNGEON.DAT', 'DATA.OVL', 'TOWNE.NPC', 'DWELLING.NPC', 'CASTLE.NPC', 'KEEP.NPC',
+  'TOWNE.TLK', 'DWELLING.TLK', 'CASTLE.TLK', 'KEEP.TLK', 'LOOK2.DAT', 'SIGNS.DAT', 'BRIT.CBT', 'DUNGEON.CBT'];
+const SAVE_FILES = ['SAVED.GAM', 'SAVED.OOL', 'BRIT.OOL', 'UNDER.OOL'];
+const MANUALS = { manual: 'manual.pdf', ref: 'Ultima 5 reference card.pdf', lore: 'Ultima 5 The Book of Lore.pdf',
+  spellbook: 'Ultima 5 spellbook.pdf', cluebook: 'Ultima 5 cluebook.pdf' };
+
+const Files = {
+  data: {},          // name (upper case) -> Uint8Array
+  dirHandle: null,   // File System Access handle (Chromium), for backups
+  async loadCached() {
+    for (const n of DATA_FILES) {
+      const b = await DB.get('files', n);
+      if (b) this.data[n] = new Uint8Array(b);
+    }
+    this.dirHandle = await DB.get('kv', 'dirHandle') || null;
+    return this.ok();
+  },
+  ok() { return ['TILES.16', 'BRIT.DAT', 'UNDER.DAT', 'TOWNE.DAT', 'DATA.OVL'].every(n => this.data[n]); },
+  // ?data=<folder>: the game files from a folder the webserver serves (relative to this page)
+  async importUrl(base) {
+    if (!base.endsWith('/')) base += '/';
+    const got = async name => {
+      for (const n of [name, name.toLowerCase()]) {
+        const r = await fetch(base + encodeURIComponent(n), { cache: 'no-store' });
+        if (r.ok) return r.arrayBuffer();
+      }
+      return null;
+    };
+    for (const n of DATA_FILES) {
+      const b = await got(n);
+      if (!b) continue;
+      this.data[n] = new Uint8Array(b);
+      await DB.put('files', n, b);
+    }
+    if (!this.data['TILES.16']) throw new Error(`No Ultima V files at ${base}`);
+    U5.reset();
+  },
+  async importList(fileList) {
+    const top = new Map();
+    for (const f of fileList) {
+      const parts = (f.webkitRelativePath || f.name).split('/');
+      if (parts.length <= 2) top.set(f.name.toUpperCase(), f);
+    }
+    if (!top.has('TILES.16') || !top.has('DATA.OVL'))
+      throw new Error('That folder has no TILES.16 / DATA.OVL. Choose the Ultima V game folder.');
+    for (const n of DATA_FILES) {
+      const f = top.get(n);
+      if (!f) continue;
+      const b = await f.arrayBuffer();
+      this.data[n] = new Uint8Array(b);
+      await DB.put('files', n, b);
+    }
+    for (const [key, name] of Object.entries(MANUALS)) {
+      const f = top.get(name.toUpperCase());
+      if (f) await DB.put('files', 'PDF:' + key, f);
+    }
+    this.saveSnapshot = {};
+    for (const n of SAVE_FILES) { const f = top.get(n); if (f) this.saveSnapshot[n] = f; }
+    U5.reset();
+  },
+};
+
+/* --------------------------------------------------- Ultima V data */
+
+const EGA = ['#000000', '#0000aa', '#00aa00', '#00aaaa', '#aa0000', '#aa00aa', '#aa5500', '#aaaaaa',
+  '#555555', '#5555ff', '#55ff55', '#55ffff', '#ff5555', '#ff55ff', '#ffff55', '#ffffff'];
+
+const LOC_NAMES = [null, 'Moonglow', 'Britain', 'Jhelom', 'Yew', 'Minoc', 'Trinsic', 'Skara Brae', 'New Magincia',
+  'Fogsbane', 'Stormcrow', 'Greyhaven', 'Waveguide', "Iolo's Hut", "Sutek's Hut", "Sin'Vraal's Hut", "Grendel's Hut",
+  'Castle Britannia', 'Castle Blackthorn', 'West Britanny', 'North Britanny', 'East Britanny', 'Paws', 'Cove',
+  "Buccaneer's Den", 'Ararat', 'Bordermarch', 'Farthing', 'Windemere', 'Stonegate', 'The Lycaeum', 'Empath Abbey',
+  "Serpent's Hold", 'Deceit', 'Despise', 'Destard', 'Wrong', 'Covetous', 'Shame', 'Hythloth', 'Doom'];
+
+// small-map files: location numbers, floors each, which have a basement
+const SMALL_FILES = [
+  ['TOWNE.DAT', [1, 2, 3, 4, 5, 6, 7, 8], [2, 2, 2, 2, 2, 2, 2, 2], [4]],
+  ['DWELLING.DAT', [9, 10, 11, 12, 13, 14, 15, 16], [3, 3, 3, 3, 1, 1, 1, 1], []],
+  ['CASTLE.DAT', [17, 18, 19, 20, 21, 22, 23, 24], [5, 5, 1, 1, 1, 1, 1, 1], [17, 18]],
+  ['KEEP.DAT', [25, 26, 27, 28, 29, 30, 31, 32], [2, 2, 1, 1, 1, 3, 3, 3], [32]],
+];
+const SMALL = {};   // location -> { file, first, floors, low }
+for (const [file, locs, floors, basements] of SMALL_FILES) {
+  let first = 0;
+  locs.forEach((loc, i) => {
+    SMALL[loc] = { file, first, floors: floors[i], low: basements.includes(loc) ? -1 : 0 };
+    first += floors[i];
+  });
+}
+
+const ITEMS = ['Leather Helm', 'Chain Coif', 'Iron Helm', 'Spiked Helm', 'Small Shield', 'Large Shield',
+  'Spiked Shield', 'Magic Shield', 'Jewelled Shield', 'Cloth Armour', 'Leather Armour', 'Ring Mail', 'Scale Mail',
+  'Chain Mail', 'Plate Mail', 'Mystic Armour', 'Dagger', 'Sling', 'Club', 'Flaming Oil', 'Main Gauche', 'Spear',
+  'Throwing Axe', 'Short Sword', 'Mace', 'Morning Star', 'Bow', 'Arrows', 'Crossbow', 'Quarrels', 'Long Sword',
+  '2H Hammer', '2H Axe', '2H Sword', 'Halberd', 'Chaos Sword', 'Magic Bow', 'Silver Sword', 'Magic Axe',
+  'Glass Sword', 'Jewelled Sword', 'Mystic Sword', 'Invisibility Ring', 'Protection Ring', 'Regeneration Ring',
+  'Amulet of Turning', 'Spiked Collar', 'Ankh'];
+const SHORT = { 'Cloth Armour': 'Cloth', 'Leather Armour': 'Leather', 'Scale Mail': 'Scale', 'Chain Mail': 'Chain',
+  'Plate Mail': 'Plate', 'Mystic Armour': 'Mystic Armr', 'Invisibility Ring': 'Invis. Ring',
+  'Protection Ring': 'Prot. Ring', 'Regeneration Ring': 'Regen. Ring', 'Amulet of Turning': 'Amulet of Turn.',
+  'Jewelled Shield': 'Jewel Shield', 'Jewelled Sword': 'Jewel Sword' };
+const SLOTS = ['Helm', 'Armour', 'Weapon', 'Shield', 'Ring', 'Amulet'];
+const CLASSES = { 0x41: 'Avatar', 0x42: 'Bard', 0x46: 'Fighter', 0x4D: 'Mage' };
+const STATUS = { 0x47: 'Good', 0x50: 'Poisoned', 0x43: 'Charmed', 0x53: 'Asleep', 0x44: 'Dead', 0x52: 'Rat',
+  0x49: 'Invisible' };
+const REAGENTS = ['Sulphurous Ash', 'Ginseng', 'Garlic', 'Spider Silk', 'Blood Moss', 'Black Pearl',
+  'Nightshade', 'Mandrake Root'];
+// [name, circle, reagent mask (bit 0 = ash ... bit 7 = mandrake), effect] in SAVED.GAM order
+// (reagents from Ultima5Redux's spell list, effects as the original names
+// them; tools/gen_web_tables.py)
+/*@SPELLS@*/
+const SPELLS = [
+  ["In Lor", 1, 1, "Light"],
+  ["Grav Por", 1, 33, "Magic Missile"],
+  ["An Zu", 1, 6, "Awaken"],
+  ["An Nox", 1, 6, "Cure Poison"],
+  ["Mani", 1, 10, "Heal"],
+  ["An Ylem", 1, 20, "Vanish"],
+  ["An Sanct", 2, 17, "Unlock"],
+  ["An Xen Corp", 2, 5, "Repel Undead"],
+  ["Rel Hur", 2, 17, "Change Wind"],
+  ["In Wis", 2, 64, "Locate"],
+  ["Kal Xen", 2, 136, "Summon Animal"],
+  ["In Xen Mani", 2, 134, "Create Food"],
+  ["Vas Lor", 3, 129, "Great Light"],
+  ["Vas Flam", 3, 33, "Fireball"],
+  ["In Flam Grav", 3, 41, "Wall of Fire"],
+  ["In Nox Grav", 3, 104, "Wall of Poison"],
+  ["In Zu Grav", 3, 42, "Wall of Sleep"],
+  ["In Por", 3, 24, "Blink"],
+  ["An Grav", 4, 33, "Dispel Field"],
+  ["In Sanct", 4, 7, "Protection"],
+  ["In Sanct Grav", 4, 168, "Protection Field"],
+  ["Uus Por", 4, 24, "Move Upwards"],
+  ["Des Por", 4, 24, "Move Downwards"],
+  ["Wis Quas", 4, 72, "Reveal"],
+  ["In Bet Xen", 5, 25, "Summon Insects"],
+  ["An Ex Por", 5, 21, "Magic Lock"],
+  ["In Ex Por", 5, 17, "Magic Unlock"],
+  ["Vas Mani", 5, 138, "Great Heal"],
+  ["In Zu", 5, 74, "Sleep"],
+  ["Rel Tym", 5, 145, "Quickness"],
+  ["In Vas Por Ylem", 6, 145, "Tremor"],
+  ["Quas An Wis", 6, 192, "Confuse"],
+  ["In An", 6, 133, "Negate Magic"],
+  ["Wis An Ylem", 6, 129, "X-Ray"],
+  ["An Xen Ex", 6, 104, "Charm"],
+  ["Rel Xen Bet", 6, 137, "Transform"],
+  ["Sanct Lor", 7, 208, "Invisibility"],
+  ["Xen Corp", 7, 96, "Kill"],
+  ["In Quas Xen", 7, 219, "Summon Clone"],
+  ["In Quas Wis", 7, 192, "Peer Map"],
+  ["In Nox Hur", 7, 81, "Poison Wind"],
+  ["In Quas Corp", 7, 196, "Fear"],
+  ["In Mani Corp", 8, 159, "Resurrect"],
+  ["Kal Xen Corp", 8, 156, "Summon Daemon"],
+  ["In Vas Grav Corp", 8, 193, "Cone of Energy"],
+  ["In Flam Hur", 8, 145, "Flame Wind"],
+  ["Vas Rel Por", 8, 161, "Gate Travel"],
+  ["An Tym", 8, 148, "Time Stop"]];
+/*@/SPELLS@*/
+const SCROLLS = ['Vas Lor', 'Rel Hur', 'In Sanct', 'In An', 'In Quas Wis', 'Kal Xen Corp', 'In Mani Corp', 'An Tym'];
+const POTIONS = ['Blue', 'Yellow', 'Red', 'Green', 'Orange', 'Purple', 'Black', 'White'];
+const SPECIAL = [[0x206, 'Keys'], [0x207, 'Gems'], [0x208, 'Torches'], [0x209, 'Grapple', 1],
+  [0x20A, 'Magic Carpets'], [0x20B, 'Skull Keys'], [0x20D, 'Amulet of Lord British', 1],
+  [0x20E, 'Crown of Lord British', 1], [0x20F, 'Sceptre of Lord British', 1], [0x210, 'Shard of Falsehood', 1],
+  [0x211, 'Shard of Hatred', 1], [0x212, 'Shard of Cowardice', 1], [0x214, 'Spyglass'],
+  [0x215, 'HMS Cape Plans', 1], [0x216, 'Sextant'], [0x217, 'Pocket Watch', 1], [0x218, 'Black Badge', 1],
+  [0x219, 'Sandalwood Box', 1]];
+// the original's inventory window: three columns of groups, [title, [[save offset, name, note]...]]
+const INVENTORY = (() => {
+  const eq = (from, names) => names.map((n, k) => [0x21A + from + k, n]);
+  const armour = ['Cloth', 'Leather', 'Ring Mail', 'Scale', 'Chain', 'Plate', 'Mystic Armor'];
+  const weapons = ['Dagger', 'Sling', 'Club', 'Flaming Oil', 'Main Gauche', 'Spear', 'Throwing Axe', 'Short Sword', 'Mace',
+    'Morning Star', 'Bow', 'Arrows', 'Crossbow', 'Quarrels', 'Long Sword', '2H Hammer', '2H Axe', '2H Sword', 'Halberd',
+    'Chaos Sword', 'Magic Bow', 'Silver Sword', 'Magic Axe', 'Glass Sword', 'Jeweled Sword', 'Mystic Sword'];
+  const quest = [[0x209, 'Grapple'], [0x20A, 'Magic carpet'], [0x214, 'Spy glass'], [0x215, 'HMS Cape plans'],
+    [0x216, 'Sextant'], [0x217, 'Pocket watch'], [0x218, 'Black Badge'], [0x20D, 'Amulet of Lord British'],
+    [0x20E, 'Crown of Lord British'], [0x20F, 'Sceptre of Lord British'], [0x212, 'Shard of Cowardice'],
+    [0x210, 'Shard of Falsehood'], [0x211, 'Shard of Hatred'], [0x219, 'Sandalwood Box']];
+  const scrolls = [['Vas Lor', 'Light'], ['Rel Hur', 'Change Wind'], ['In Sanct', 'Protection'], ['In An', 'Negate Magic'],
+    ['In Quas Wis', 'Peer Map'], ['Kal Xen Corp', 'Summon Daemon'], ['In Mani Corp', 'Resurrect'], ['An Tym', 'Time Stop']];
+  const potions = [['Blue', 'Awaken'], ['Yellow', 'Heal'], ['Red', 'Cure Poison'], ['Green', 'Poison'], ['Orange', 'Sleep'],
+    ['Purple', 'Rat'], ['Black', 'Invisibility'], ['White', 'X-Ray']];
+  const reagents = ['Sulfur Ash', 'Ginseng', 'Garlic', 'Spider Silk', 'Blood Moss', 'Black Pearl', 'Nightshade', 'Mandrake Root'];
+  return [
+    [['HELMETS', eq(0, ITEMS.slice(0, 4))], ['SHIELDS', eq(4, ITEMS.slice(4, 9))], ['ARMOR', eq(9, armour)],
+      ['QUEST ITEMS', quest]],
+    [['WEAPONS', eq(16, weapons)], ['RINGS', eq(42, ITEMS.slice(42, 45))], ['AMULETS', eq(45, ITEMS.slice(45, 48))]],
+    [['SCROLLS', scrolls.map(([n, e], k) => [0x27A + k, n, e])], ['POTIONS', potions.map(([n, e], k) => [0x282 + k, n, e])],
+      ['REAGENTS', reagents.map((n, k) => [0x2AA + k, n])]]];
+})();
+const REAGENT_ABBR = ['ash', 'gin', 'gar', 'sil', 'mos', 'prl', 'nig', 'man'];
+const LEVEL_XP = [0, 100, 200, 400, 800, 1600, 3200, 6400];   // XP needed for level n+1
+
+// map titles besides the locations (the original's own list): world, underworld
+const EXTRA_TITLES = {
+  world: [[233, 66, 'Honesty'], [128, 92, 'Compassion'], [36, 229, 'Valor'], [73, 11, 'Justice'],
+    [205, 45, 'Sacrifice'], [81, 207, 'Honor'], [231, 216, 'Humility'], [233, 233, 'Codex'], [54, 137, 'Waterfall to UW']],
+  under: [[105, 226, 'Battlefield'], [233, 233, 'Lava pit'], [130, 65, 'Shard of Hatred'], [192, 80, 'Shard of Falsehood'],
+    [176, 184, 'Shard of Cowardice']],
+};
+// which locations get a title: Britain and the three Britannies sit under Castle Britannia's,
+// Ararat and Doom are underworld places, the dungeons are in both
+const WORLD_LOCS = [...Array(40).keys()].map(i => i + 1).filter(l => ![2, 19, 20, 21, 25, 40].includes(l));
+const UNDER_LOCS = [25, 33, 34, 35, 36, 37, 38, 39, 40];
+
+// the colours the original gives the large maps' tiles when a tile is only a
+// few pixels big (measured from its window); other tiles: the average of their
+// non-black pixels
+const MINIMAP = (() => {
+  const m = {}, set = (from, to, c) => { for (let t = from; t <= to; t++) m[t] = c; };
+  set(0x10, 0x1B, '#b40204'); set(0x1C, 0x1F, '#dcb604'); set(0x20, 0x2E, '#946e4c'); set(0x30, 0x37, '#044a04');
+  set(0x38, 0x3F, '#b40204'); set(0x60, 0x6F, '#0492fc');
+  return Object.assign(m, { 0x01: '#0426fc', 0x02: '#0492fc', 0x03: '#04b6fc', 0x04: '#046e6c', 0x05: '#046e04',
+    0x06: '#4c6e4c', 0x07: '#dcb604', 0x08: '#049204', 0x09: '#04b604', 0x0A: '#04da04', 0x0B: '#6c6e6c', 0x0C: '#949294',
+    0x0D: '#b4b6b4', 0x0E: '#6c6e6c', 0x0F: '#6c6e6c', 0x2F: '#dcb604', 0x47: '#b4b6b4', 0x5E: '#b40204', 0x5F: '#b40204',
+    0x6A: '#b40204', 0x6B: '#b40204', 0x8F: '#b40204', 0xA4: '#fcfefc', 0xD4: '#0426fc', 0xFF: '#000000' });
+})();
+
+// Ultima V's LZW (*.16 files): 4-byte length, then 9..12-bit codes, 0x100 = reset, 0x101 = end
+function lzw(src) {
+  const size = src[0] | src[1] << 8 | src[2] << 16 | src[3] << 24;
+  const out = new Uint8Array(size);
+  let o = 0, bit = 32, width = 9, next = 0x102, prev = null;
+  const dict = [], nbits = src.length * 8;
+  const code = () => {
+    if (bit + width > nbits) return -1;
+    let v = 0;
+    for (let i = 0; i < width; i++, bit++) v |= ((src[bit >> 3] >> (bit & 7)) & 1) << i;
+    return v;
+  };
+  while (o < size) {
+    const c = code();
+    if (c < 0 || c === 0x101) break;
+    if (c === 0x100) { width = 9; next = 0x102; dict.length = 0; prev = null; continue; }
+    let s;
+    if (c < 0x100) s = [c];
+    else if (dict[c]) s = dict[c];
+    else if (c === next && prev) s = prev.concat(prev[0]);
+    else throw new Error('bad LZW code ' + c);
+    for (const b of s) out[o++] = b;
+    if (prev && next < 4096) {
+      dict[next++] = prev.concat(s[0]);
+      if (next >= (1 << width) && width < 12) width++;
+    }
+    prev = s;
+  }
+  return out;
+}
+
+const U5 = {
+  atlas: null, worldMap: null, underMap: null, smallMaps: {}, names: null,
+  reset() { this.atlas = this.worldMap = this.underMap = this.names = this.tileColours = null; this.smallMaps = {}; Render.dirty = true; },
+  // one colour per tile for small scales: the original's for the terrain, else
+  // the average of the tile's non-black pixels
+  colours() {
+    if (this.tileColours || !this.tiles()) return this.tileColours;
+    const d = this.atlas.getContext('2d').getImageData(0, 0, 512, 256).data, out = new Uint8Array(512 * 3);
+    for (let t = 0; t < 512; t++) {
+      if (MINIMAP[t]) {
+        for (let k = 0; k < 3; k++) out[t * 3 + k] = parseInt(MINIMAP[t].slice(1 + 2 * k, 3 + 2 * k), 16);
+        continue;
+      }
+      const tx = (t % 32) * 16, ty = (t >> 5) * 16, sum = [0, 0, 0];
+      let n = 0;
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+        const p = ((ty + y) * 512 + tx + x) * 4;
+        if (d[p] | d[p + 1] | d[p + 2]) { sum[0] += d[p]; sum[1] += d[p + 1]; sum[2] += d[p + 2]; n++; }
+      }
+      if (n) for (let k = 0; k < 3; k++) out[t * 3 + k] = sum[k] / n;
+    }
+    return this.tileColours = out;
+  },
+  tiles() {
+    if (this.atlas || !Files.data['TILES.16']) return this.atlas;
+    const raw = lzw(Files.data['TILES.16']);
+    const c = document.createElement('canvas');
+    c.width = 32 * 16; c.height = 16 * 16;
+    const g = c.getContext('2d'), img = g.createImageData(c.width, c.height);
+    const pal = EGA.map(h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+    for (let t = 0; t < 512; t++) {
+      const tx = (t % 32) * 16, ty = (t >> 5) * 16;
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+        const b = raw[t * 128 + y * 8 + (x >> 1)], ci = x & 1 ? b & 15 : b >> 4;
+        const p = ((ty + y) * c.width + tx + x) * 4;
+        [img.data[p], img.data[p + 1], img.data[p + 2]] = pal[ci];
+        img.data[p + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return this.atlas = c;
+  },
+  large(under) {
+    const key = under ? 'underMap' : 'worldMap';
+    if (this[key]) return this[key];
+    const src = Files.data[under ? 'UNDER.DAT' : 'BRIT.DAT'], ovl = Files.data['DATA.OVL'];
+    if (!src || !ovl) return null;
+    const m = new Uint8Array(65536);
+    let serial = 0;
+    for (let ch = 0; ch < 256; ch++) {
+      const water = !under && ovl[0x3886 + ch] === 0xFF;
+      const cx = (ch & 15) * 16, cy = (ch >> 4) * 16;
+      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++)
+        m[(cy + y) * 256 + cx + x] = water ? 1 : src[serial++];
+    }
+    return this[key] = m;
+  },
+  small(loc, z) {
+    const s = SMALL[loc];
+    if (!s) return null;
+    const idx = s.first + (z - s.low), key = s.file + ':' + idx;
+    if (this.smallMaps[key]) return this.smallMaps[key];
+    const f = Files.data[s.file];
+    if (!f || idx < s.first || idx >= s.first + s.floors) return null;
+    return this.smallMaps[key] = f.slice(idx * 1024, idx * 1024 + 1024);
+  },
+  dungeon(loc, z) {
+    const f = Files.data['DUNGEON.DAT'];
+    if (!f || loc < 33 || loc > 40) return null;
+    const o = ((loc - 33) * 8 + (z & 7)) * 64;
+    return f.slice(o, o + 64);
+  },
+  locXY(loc) {
+    const ovl = Files.data['DATA.OVL'];
+    return ovl ? [ovl[0x1E9A + loc - 1], ovl[0x1EC2 + loc - 1]] : null;
+  },
+  // NPC names per small-map location and NPC slot, from *.NPC dialog numbers and *.TLK scripts
+  npcName(loc, slot) {
+    if (!this.names) this.names = buildNpcNames();
+    return this.names[loc]?.[slot] || '';
+  },
+};
+
+// merchants have these dialog numbers (81-88) instead of a script
+const MERCHANTS = ['Weapon dealer', 'Barkeeper', 'Horse seller', 'Ship seller', 'Magic seller', 'Guildmaster', 'Healer',
+  'Innkeeper'];
+
+function buildNpcNames() {
+  const names = {};
+  for (const [dat, locs] of SMALL_FILES) {
+    const base = dat.replace('.DAT', '');
+    const npc = Files.data[base + '.NPC'], tlk = Files.data[base + '.TLK'];
+    if (!npc || !tlk) continue;
+    const talk = parseTlkNames(tlk);
+    locs.forEach((loc, i) => {
+      const rec = npc.subarray(i * 0x240, (i + 1) * 0x240), list = [];
+      for (let s = 0; s < 32; s++) {
+        const dlg = rec[0x220 + s];
+        list[s] = dlg >= 0x81 && dlg <= 0x88 ? MERCHANTS[dlg - 0x81] : talk[dlg] || '';
+      }
+      names[loc] = list;
+    });
+  }
+  return names;
+}
+
+/* Talk scripts (*.TLK): lines end with 00; A0-A1, A5-DA, E1-FA are characters
+ * (minus 80), most bytes below 81 are words from DATA.OVL's list at 104C, 81-8F
+ * are commands, 91-9B labels (90 before one starts its definition, 90 9F ends
+ * the script). The dump is the original's "Dump TLK during talk" format. */
+const TLK_CODES = ['avatar', 'end', 'pause', 'join party', 'gold', 'change', 'or', 'ask name', 'increase karma',
+  'decrease karma', 'call guards', 'if knows name / else', 'new line', 'rune', 'wait for key'];
+const TLK_WORD = (() => {   // talk byte -> index in the word list (the list has gaps)
+  const m = {}, add = (a, b, off) => { for (let i = a; i <= b; i++) m[i] = i + off; };
+  add(1, 7, -1); add(9, 27, -2); add(29, 49, -3); add(51, 64, -4); add(66, 66, -5); add(68, 69, -6); add(71, 71, -7);
+  add(76, 128, -11);
+  return m;
+})();
+const TLK_FILES = ['TOWNE.TLK', 'DWELLING.TLK', 'CASTLE.TLK', 'KEEP.TLK'];
+
+function tlkWords() {
+  const ovl = Files.data['DATA.OVL'], words = [];
+  let s = '';
+  for (let i = 0x104C; i < 0x104C + 0x24E; i++) {
+    if (ovl[i] === 0) { words.push(s); s = ''; } else s += String.fromCharCode(ovl[i]);
+  }
+  return words;
+}
+
+// every script of the four TLK files: { file, npc, bytes }
+function tlkEntries() {
+  const out = [];
+  for (const file of TLK_FILES) {
+    const t = Files.data[file];
+    if (!t) continue;
+    const n = t[0] | t[1] << 8, offs = [];
+    for (let i = 0; i < n; i++) offs.push([t[2 + i * 4] | t[3 + i * 4] << 8, t[4 + i * 4] | t[5 + i * 4] << 8]);
+    const starts = offs.map(o => o[1]).sort((a, b) => a - b);
+    for (const [npc, off] of offs) {
+      const end = starts.find(s => s > off) || t.length;
+      out.push({ file, npc, bytes: t.subarray(off, end) });
+    }
+  }
+  return out;
+}
+
+function decodeTlk(bytes) {
+  const words = tlkWords(), lines = [];
+  let cur = [];
+  for (let i = 0; i <= bytes.length; i++) {
+    const b = i < bytes.length ? bytes[i] : 0;
+    if (b === 0) { lines.push(cur); cur = []; continue; }
+    if ((b >= 0xA0 && b <= 0xA1) || (b >= 0xA5 && b <= 0xDA) || (b >= 0xE1 && b <= 0xFA)) {
+      const ch = String.fromCharCode(b - 0x80);
+      if (ch === '@') continue;
+      if (typeof cur[cur.length - 1] === 'string' && cur.text) cur[cur.length - 1] += ch;
+      else { cur.push(ch); cur.text = true; }
+      continue;
+    }
+    cur.text = false;
+    cur.push(TLK_WORD[b] !== undefined && words[TLK_WORD[b]] !== undefined ? words[TLK_WORD[b]] : b);
+  }
+  const tok = t => typeof t === 'string' ? t.trim()
+    : t >= 0x81 && t <= 0x8F ? `<${TLK_CODES[t - 0x81]}>`
+    : t >= 0x91 && t <= 0x9B ? `<goto label_${t - 0x91}>` : `<code_${t}>`;
+  const text = l => l.map(tok).filter(Boolean).join(' ');
+  const out = ['Name', 'Description', 'Greeting', 'Job', 'Bye'].map((h, k) => `${h.padEnd(12)}: ${lines[k] ? text(lines[k]) : ''}`);
+  out.push('');
+  for (const l of lines.slice(5)) {
+    if (l[0] === 0x90 && l[1] === 0x9F) break;
+    if (l[0] === 0x90 && l[1] >= 0x91 && l[1] <= 0x9B) {
+      out.push('', `label_${l[1] - 0x91}:`);
+      const rest = text(l.slice(2));
+      if (rest) out.push(rest);
+      continue;
+    }
+    out.push(text(l));
+  }
+  return out;
+}
+
+// TLK: count (uint16), then (npc number uint16, offset uint16) pairs; each script starts
+// with the name as text compressed with Ultima V's talk encoding (bit 7 set = plain char)
+function parseTlkNames(t) {
+  const out = {};
+  const n = t[0] | t[1] << 8;
+  for (let i = 0; i < n; i++) {
+    const num = t[2 + i * 4] | t[3 + i * 4] << 8, off = t[4 + i * 4] | t[5 + i * 4] << 8;
+    let s = '';
+    for (let p = off; p < t.length && s.length < 30; p++) {
+      const b = t[p];
+      if (b === 0) break;
+      if (b & 0x80) s += String.fromCharCode(b & 0x7F);
+      else break;
+    }
+    out[num] = s.trim();
+  }
+  return out;
+}
+
+/* ------------------------------------------------------- game state */
+
+const DS_COPYRIGHT = 0x18, SAVE = 0x55B6, VIEW = 0xAB12, MAPBUF = 0x6618, SAVE_LEN = 4192;
+// in combat (location FF): the 11x11 combat map (rows of 32 bytes) and 8-byte
+// records of the combatants (party 0-5, monsters from 6; a monster's HP first)
+const COMBAT_MAP = 0xAD24, COMBAT_UNITS = 0xBA24;
+const COPYRIGHT = 'MS Run-Time Library - Copyright (c) 1988, Microsoft Corp';
+
+const Game = {
+  base: null, save: null, view: null, mapbuf: null, cmap: null, cunits: null, info: null, lastOk: 0,
+  get loc() { return this.save[0x2ED]; },
+  get z() { const z = this.save[0x2EF]; return z > 127 ? z - 256 : z; },
+  get x() { return this.save[0x2F0]; },   // in combat: the combatant whose turn it is
+  get y() { return this.save[0x2F1]; },
+  get under() { return this.loc === 0 && this.save[0x2EF] === 0xFF; },
+  area() {
+    const l = this.loc;
+    if (l === 0) return this.under ? 'under' : 'world';
+    if (l === 0xFF) return 'combat';
+    if (l >= 33 && l <= 40) return 'dungeon';
+    return 'small';
+  },
+  areaKey() {
+    const a = this.area();
+    return a === 'world' ? 'w' : a === 'under' ? 'u' : a === 'combat' ? 'c' : `${a[0]}${this.loc}_${this.z}`;
+  },
+  // the combatants: save's unit table (party first), HP from the character records or DS:BA24
+  combatants() {
+    const party = this.party(), units = this.save.subarray(0x6B4, 0x6B4 + 256), list = [];
+    for (let i = 0; i < 32; i++) {
+      const u = units.subarray(i * 8, i * 8 + 8);
+      if (!u[0] && !u[1]) continue;
+      const pc = i < party.length ? party[i] : null, rec = pc ? i : i - party.length + 6;
+      if (rec * 8 >= this.cunits.length) continue;
+      list.push({ i, tile: 0x100 + u[0], x: u[2], y: u[3], pc, hp: pc ? pc.hp : this.cunits[rec * 8],
+        active: i === this.save[0x2F8] });
+    }
+    return list;
+  },
+  u16(o) { return this.save[o] | this.save[o + 1] << 8; },
+  party() {
+    const list = [];
+    for (let i = 0; i < 16 && list.length < 6; i++) {
+      const o = 2 + i * 32, r = this.save.subarray(o, o + 32);
+      if (r[0x1F] !== 0) continue;
+      let name = '';
+      for (let k = 0; k < 9 && r[k]; k++) name += String.fromCharCode(r[k]);
+      list.push({ index: i, off: o, name, gender: r[9], cls: r[10], status: r[11], str: r[12], dex: r[13],
+        int: r[14], mp: r[15], hp: r[16] | r[17] << 8, maxhp: r[18] | r[19] << 8, xp: r[20] | r[21] << 8,
+        level: r[22], eq: [...r.subarray(0x19, 0x1F)] });
+    }
+    return list;
+  },
+  async find() {
+    const needle = new TextEncoder().encode(COPYRIGHT);
+    const chunk = 0x10000;
+    let carry = new Uint8Array(0);
+    for (let a = 0; a < 0x100000; a += chunk) {
+      const d = await Api.read(a, chunk);
+      const buf = new Uint8Array(carry.length + d.length);
+      buf.set(carry); buf.set(d, carry.length);
+      const i = indexOfBytes(buf, needle);
+      if (i >= 0) {
+        const base = a - carry.length + i - DS_COPYRIGHT;
+        const save = await Api.read(base + SAVE, SAVE_LEN);
+        if (save[0x2B5] >= 1 && save[0x2B5] <= 6 && save[2] >= 0x20) return base;
+      }
+      carry = d.subarray(d.length - needle.length);
+    }
+    return null;
+  },
+  async poll() {
+    const [save, view, mapbuf, cmap, cunits] = await Promise.all([Api.read(this.base + SAVE, SAVE_LEN),
+      Api.read(this.base + VIEW, 352), Api.read(this.base + MAPBUF - 5, 1029),
+      Api.read(this.base + COMBAT_MAP, 352), Api.read(this.base + COMBAT_UNITS, 256)]);
+    return { save, view, mapbuf: mapbuf.subarray(5), ddir: mapbuf[0], cmap, cunits };   // DS:6613: facing in dungeons
+  },
+  async writeSave(off, bytes) {
+    await Api.write(this.base + SAVE + off, Uint8Array.from(bytes));
+    this.save.set(bytes, off);
+  },
+};
+
+function indexOfBytes(hay, needle) {
+  const first = needle[0];
+  outer: for (let i = hay.indexOf(first); i >= 0 && i <= hay.length - needle.length; i = hay.indexOf(first, i + 1)) {
+    for (let k = 1; k < needle.length; k++) if (hay[i + k] !== needle[k]) continue outer;
+    return i;
+  }
+  return -1;
+}
+
+/* ---------------------------------------------------- exploration */
+
+const Explored = {
+  maps: {}, dirty: new Set(), gen: 0,
+  size(key) { return key === 'w' || key === 'u' ? 256 : key[0] === 'd' ? 8 : 32; },
+  get(key) {
+    if (!this.maps[key]) {
+      const m = this.maps[key] = new Uint8Array(this.size(key) ** 2);
+      DB.get('kv', 'exp:' + key).then(b => {
+        if (!b) return;
+        const old = new Uint8Array(b);
+        for (let i = 0; i < m.length; i++) m[i] |= old[i];
+        this.gen++; Render.draw();
+      });
+    }
+    return this.maps[key];
+  },
+  mark(key, x, y) {
+    const n = this.size(key), m = this.get(key);
+    x = ((x % n) + n) % n; y = ((y % n) + n) % n;
+    if (!m[y * n + x]) { m[y * n + x] = 1; this.dirty.add(key); this.gen++; }
+  },
+  fill(key, v) { this.get(key).fill(v); this.dirty.add(key); this.gen++; Render.draw(); },
+  async clearAll() {
+    for (const k of await DB.keys('kv')) if (String(k).startsWith('exp:')) await DB.del('kv', k);
+    this.maps = {}; this.gen++; Render.draw();
+  },
+  shown(area) {
+    const s = Settings.v;
+    return area === 'world' ? s.worldExplored : area === 'under' ? s.underworldExplored
+      : area === 'dungeon' ? s.dungeonsExplored : area === 'combat' || s.townsExplored;
+  },
+  flush() {
+    for (const k of this.dirty) DB.put('kv', 'exp:' + k, this.maps[k].buffer.slice(0));
+    this.dirty.clear();
+  },
+};
+setInterval(() => Explored.flush(), 3000);
+
+function markVisible() {
+  const key = Game.areaKey(), area = Game.area();
+  if (area === 'combat') return;
+  if (area === 'dungeon') {   // first-person view: the cell you stand on and its neighbours
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) Explored.mark(key, Game.x + dx, Game.y + dy);
+    return;
+  }
+  const v = Game.view;
+  for (let r = 0; r < 11; r++) for (let c = 0; c < 11; c++)
+    if (v[r * 32 + c] !== 0xFF) Explored.mark(key, Game.x - 5 + c, Game.y - 5 + r);
+}
+
+/* ------------------------------------------------------------ HUD */
+
+const Hud = {
+  last: '',
+  draw() {
+    const box = $('#hud');
+    box.classList.toggle('hidden', !Settings.v.hud);
+    if (!Game.save) { box.innerHTML = ''; this.last = ''; return; }
+    const party = Game.party(), s = Game.save;
+    const sig = JSON.stringify([party, s[0x2D9], s[0x2DB], s[0x206], s[0x20B], s[0x208], s[0x207]]);
+    if (sig === this.last) return;
+    this.last = sig;
+    box.innerHTML = '';
+    for (let i = 0; i < 6; i++) {
+      const p = party[i], col = el('div', { className: 'pc' });
+      if (p) {
+        const st = String.fromCharCode(p.status);
+        col.append(el('div', { className: 'nm ' + st, textContent: p.name, title: STATUS[p.status] || st,
+          onclick: () => Editor.open(p.index) }));
+        const right = [`${String.fromCharCode(p.cls)} ${p.level}`, p.str, p.dex, p.int, '', p.mp];
+        p.eq.forEach((e, k) => {
+          const name = e === 0xFF ? SLOTS[k] : (SHORT[ITEMS[e]] || ITEMS[e] || '?');
+          col.append(el('div', { className: 'rw' }, el('span', { className: e === 0xFF ? 'e' : '', textContent: name }),
+            el('span', { textContent: right[k] })));
+        });
+        const next = LEVEL_XP[Math.min(p.level, 7)], prev = LEVEL_XP[Math.max(p.level - 1, 0)];
+        const frac = p.level >= 8 ? 1 : Math.max(0, Math.min(1, (p.xp - prev) / (next - prev)));
+        col.append(el('div', { className: 'xp', title: `${p.xp} XP` + (p.level < 8 ? `, ${next} for level ${p.level + 1}` : '') },
+          el('i', { style: `width:${frac * 100}%` })));
+        const hpf = p.maxhp ? Math.min(1, p.hp / p.maxhp) : 0;
+        col.append(el('div', { className: 'hp' }, el('i', { className: hpf < 0.5 ? 'low' : '', style: `width:${hpf * 100}%` }),
+          el('span', { textContent: `${p.hp} / ${p.maxhp}` })));
+      }
+      box.append(col);
+    }
+    const side = el('div', { id: 'side', title: 'Click: spells, right-click: inventory' });
+    side.append(el('b', { textContent: `${String(s[0x2D9]).padStart(2, '0')}:${String(s[0x2DB]).padStart(2, '0')}` }));
+    for (const [o, n] of [[0x206, 'Keys'], [0x20B, 'Skull keys'], [0x208, 'Torches'], [0x207, 'Gems']])
+      side.append(el('div', { textContent: n }), el('div', { textContent: s[o] }));
+    side.onclick = () => Lists.open('spells');
+    side.oncontextmenu = e => { e.preventDefault(); Lists.open('inventory'); };
+    box.append(side);
+  },
+};
+
+/* ------------------------------------------------------------ map
+ * The map is drawn from a cached full-size image of the area (16 px per
+ * tile) and a mask of the unexplored cells; units, titles and the cursor are
+ * drawn on top each time. */
+
+// dungeon cells as the original draws them: walls with tile 78 (79 the
+// second kind), corridors #333, ladders tile 200 (up) / 201 (down); the rest
+// marked on the corridor colour
+const DUNGEON_CELL = { 0: ['#333', ''], 1: ['#333', '', 200], 2: ['#333', '', 201], 3: ['#333', '', 200, 201],
+  4: ['#333', '$'], 5: ['#24425e', 'F'], 6: ['#333', 'T'], 7: ['#333', '$'], 8: ['#4a2c4a', '#'],
+  9: ['#333', ''], 10: ['#333', 'R'], 11: ['#000', '', 78], 12: ['#000', '', 79], 13: ['#000', 's', 78],
+  14: ['#7a5a2a', 'D'], 15: ['#2e4a2e', 'R'] };
+const DUNGEON_INFO = { 0: 'corridor', 1: 'ladder up', 2: 'ladder down', 3: 'ladders up and down', 4: 'chest',
+  5: 'fountain', 6: 'trap', 7: 'open chest', 8: 'magic field', 10: 'room', 11: 'wall', 12: 'wall',
+  13: 'secret door', 14: 'door', 15: 'room' };
+
+const Render = {
+  dirty: true, expDirty: true, mouse: null, mouseCell: null, lens: false,
+  canvas: $('#map'),
+  base: null, baseKey: '', small: null, smallKey: '', mask: null, maskKey: '', maskGen: 0,
+  tileSize(view) {
+    const wrap = $('#mapwrap'), z = Settings.v.zoom;
+    if (z > 0) return z;
+    const fit = Math.min(wrap.clientWidth, wrap.clientHeight) / view;
+    return view > 32 ? Math.max(1, Math.min(16, fit)) : Math.max(4, Math.min(view < 32 ? 96 : 40, Math.floor(fit)));
+  },
+  current() {
+    if (!Game.save) return null;
+    const area = Game.area(), loc = Game.loc, z = Game.z;
+    if (area === 'world' || area === 'under') {
+      const m = U5.large(area === 'under');
+      return m && { area, n: 256, tiles: m, key: Game.areaKey() };
+    }
+    if (area === 'dungeon') {
+      const d = U5.dungeon(loc, z);
+      return d && { area, n: 8, cells: d, key: Game.areaKey() };
+    }
+    if (area === 'combat') {   // the combat map, 11 x 11 out of rows of 32
+      const t = new Uint8Array(121);
+      for (let y = 0; y < 11; y++) t.set(Game.cmap.subarray(y * 32, y * 32 + 11), y * 11);
+      return { area, n: 11, tiles: t, key: 'c' };
+    }
+    if (!U5.small(loc, z)) return null;
+    return { area, n: 32, tiles: Game.mapbuf, key: Game.areaKey() };   // the floor as the game has it now
+  },
+  baseImage(cur) {
+    const key = cur.key + ':' + (cur.n < 256 && cur.tiles ? cur.tiles.join(',') : '');
+    if (this.baseKey === key) return this.base;
+    const atlas = U5.tiles(), n = cur.n, c = document.createElement('canvas');
+    c.width = c.height = n * 16;
+    const g = c.getContext('2d');
+    if (cur.cells) {
+      g.font = '9px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+        const v = cur.cells[y * 8 + x], [fill, icon, t1, t2] = DUNGEON_CELL[v >> 4] || ['#333', '?'];
+        g.fillStyle = fill; g.fillRect(x * 16, y * 16, 16, 16);
+        if (t1 !== undefined) {
+          if (t2 === undefined) g.drawImage(atlas, (t1 % 32) * 16, (t1 >> 5) * 16, 16, 16, x * 16, y * 16, 16, 16);
+          else {   // ladders up and down: half of each
+            g.drawImage(atlas, (t1 % 32) * 16, (t1 >> 5) * 16, 8, 16, x * 16, y * 16, 8, 16);
+            g.drawImage(atlas, (t2 % 32) * 16 + 8, (t2 >> 5) * 16, 8, 16, x * 16 + 8, y * 16, 8, 16);
+          }
+        }
+        if (icon) { g.fillStyle = '#eee'; g.fillText(icon === 'R' ? String(v & 15) : icon, x * 16 + 8, y * 16 + 9); }
+      }
+    } else {
+      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+        const t = cur.tiles[y * n + x];
+        g.drawImage(atlas, (t % 32) * 16, (t >> 5) * 16, 16, 16, x * 16, y * 16, 16, 16);
+      }
+    }
+    this.base = c; this.baseKey = key;
+    return c;
+  },
+  // a large map at a few pixels per tile: one pixel per cell in the tile's colour
+  smallImage(cur) {
+    if (this.smallKey === cur.key) return this.small;
+    const cols = U5.colours(), c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d'), img = g.createImageData(256, 256);
+    for (let i = 0; i < 65536; i++) {
+      const t = cur.tiles[i] * 3;
+      img.data.set([cols[t], cols[t + 1], cols[t + 2], 255], i * 4);
+    }
+    g.putImageData(img, 0, 0);
+    this.small = c; this.smallKey = cur.key;
+    return c;
+  },
+  maskImage(cur) {
+    const key = cur.key + ':' + Explored.gen;
+    if (this.maskKey === key) return this.mask;
+    const n = cur.n, exp = Explored.get(cur.key);
+    const c = this.mask && this.mask.width === n ? this.mask : document.createElement('canvas');
+    c.width = c.height = n;
+    const g = c.getContext('2d'), img = g.createImageData(n, n);
+    for (let i = 0; i < n * n; i++) img.data[i * 4 + 3] = exp[i] ? 0 : 255;
+    g.putImageData(img, 0, 0);
+    this.mask = c; this.maskKey = key;
+    return c;
+  },
+  draw() {
+    const msg = $('#msg');
+    if (!Game.save) return;
+    if (!U5.tiles()) {
+      if (!$('#pickBtn')) {
+        msg.innerHTML = '<h2>Choose the Ultima V game folder</h2><p>Ultimapper reads the maps and tiles from the ' +
+          'game\'s files (TILES.16, BRIT.DAT, ...). Your browser keeps a copy, so this is needed once.</p>' +
+          '<p><button id="pickBtn">Choose folder&hellip;</button></p>';
+        $('#pickBtn').onclick = () => pickFolder();
+      }
+      return;
+    }
+    if (msg.innerHTML) msg.innerHTML = '';
+    const cur = this.current();
+    if (!cur) return;
+    const n = cur.n, ts = this.tileSize(n);
+    const c = this.canvas, g = c.getContext('2d'), size = Math.round(n * ts);
+    if (c.width !== size || c.height !== size) { c.width = size; c.height = size; }
+    g.fillStyle = '#000'; g.fillRect(0, 0, size, size);
+    const showAll = Explored.shown(cur.area), small = !cur.cells && ts < 8;
+    // a few pixels per tile: the tiles' colours like the original, else the tiles themselves
+    g.imageSmoothingEnabled = !small && ts < 12;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(small ? this.smallImage(cur) : this.baseImage(cur), 0, 0, size, size);
+    g.imageSmoothingEnabled = false;
+    if (!showAll) g.drawImage(this.maskImage(cur), 0, 0, size, size);
+    const exp = Explored.get(cur.key);
+    const atlas = U5.tiles();
+    // map units (NPCs, monsters, vehicles, the party) on this floor
+    if (cur.area === 'combat') this.drawCombat(g, ts);
+    else if (!cur.cells && !small) {
+      const units = Game.save.subarray(0x6B4, 0x6B4 + 256), names = [];
+      for (let i = 31; i >= 0; i--) {
+        const u = units.subarray(i * 8, i * 8 + 8);
+        if (i && !u[0] && !u[1]) continue;
+        const ux = i ? u[2] : Game.x, uy = i ? u[3] : Game.y;
+        if (ux >= n || uy >= n) continue;
+        if (i && cur.area === 'small' && (u[4] > 127 ? u[4] - 256 : u[4]) !== Game.z) continue;
+        if (i && !showAll && !exp[uy * n + ux] && !Settings.v.debug) continue;
+        const t = 0x100 + u[0];
+        g.drawImage(atlas, (t % 32) * 16, (t >> 5) * 16, 16, 16, ux * ts, uy * ts, ts, ts);
+        if (i && Settings.v.npcNames && cur.area === 'small' && ts >= 12) {
+          const name = U5.npcName(Game.loc, i);
+          if (name) names.push([name, ux * ts + ts / 2, uy * ts]);
+        }
+      }
+      for (const [name, x, y] of names) this.label(g, name, x, y, ts);
+    }
+    if (cur.cells) {   // in a dungeon: the party as a green arrow the way it faces (DS:6613)
+      const d = Game.ddir & 3, X = Game.x * ts + ts / 2, Y = Game.y * ts + ts / 2;
+      g.save(); g.translate(X, Y); g.rotate(d * Math.PI / 2);
+      g.fillStyle = '#00aa00'; g.strokeStyle = '#005500'; g.lineWidth = Math.max(1, ts / 24);
+      g.beginPath(); g.moveTo(0, -ts * 0.38); g.lineTo(ts * 0.3, ts * 0.3); g.lineTo(-ts * 0.3, ts * 0.3); g.closePath(); g.fill(); g.stroke();
+      g.restore();
+    } else if (small && Settings.v.partyLocation) this.partyFrame(g, Game.x * ts, Game.y * ts, ts);
+    if (cur.n === 256) this.titles(g, cur, ts, exp, showAll);
+    if (Settings.v.debug && cur.area === 'world') {   // the 16x16 chunks, and the four the game has in memory
+      g.strokeStyle = '#ffffff28'; g.lineWidth = 1;
+      for (let k = 16; k < n; k += 16) {
+        g.beginPath(); g.moveTo(k * ts + 0.5, 0); g.lineTo(k * ts + 0.5, size); g.stroke();
+        g.beginPath(); g.moveTo(0, k * ts + 0.5); g.lineTo(size, k * ts + 0.5); g.stroke();
+      }
+      const cx = (Game.x >> 4) - (Game.x % 16 < 8 ? 1 : 0), cy = (Game.y >> 4) - (Game.y % 16 < 8 ? 1 : 0);
+      g.strokeStyle = '#40a0ff'; g.lineWidth = 2;
+      g.strokeRect(cx * 16 * ts, cy * 16 * ts, 32 * ts, 32 * ts);
+    }
+    if (this.mouse && !(this.lens && cur.n === 256)) {
+      g.strokeStyle = '#ffff40'; g.lineWidth = 1;
+      g.strokeRect(this.mouse[0] * ts + 0.5, this.mouse[1] * ts + 0.5, ts - 1, ts - 1);
+    }
+    if (this.lens && cur.n === 256 && this.mouseCell) this.drawLens(g, cur, ts, size);
+    this.dirty = this.expDirty = false;
+    this.follow([Game.x, Game.y], ts);
+  },
+  // combat like the original: a square per combatant with its hit points, the
+  // party green, monsters red, the one whose turn it is blue
+  drawCombat(g, ts) {
+    const s = Math.round(ts * 0.71), fs = Math.round(Math.max(10, ts * 0.26));
+    g.font = `${fs}px Tahoma, Verdana, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (const u of Game.combatants()) {
+      if (u.x >= 11 || u.y >= 11 || (!u.pc && !u.hp)) continue;   // dead monsters stay in the list
+      const [fill, edge] = u.active ? ['#5555ff', '#2a2a80'] : u.pc ? ['#22aa22', '#115511'] : ['#bb2222', '#5e1111'];
+      const x = Math.round(u.x * ts + (ts - s) / 2), y = Math.round(u.y * ts + (ts - s) / 2);
+      g.fillStyle = edge; g.fillRect(x, y, s, s);
+      g.fillStyle = fill; g.fillRect(x + 2, y + 2, s - 4, s - 4);
+      g.fillStyle = '#fff'; g.fillText(String(u.hp), x + s / 2, y + s / 2 + 1);
+    }
+  },
+  // the party on a large map at a small scale: a white cell in a 35 px frame
+  partyFrame(g, X, Y, ts) {
+    g.fillStyle = '#fff'; g.fillRect(X, Y, Math.max(ts, 2), Math.max(ts, 2));
+    const F = Math.round(Math.max(35, ts * 11)), fx = Math.round(X + ts / 2 - F / 2), fy = Math.round(Y + ts / 2 - F / 2);
+    g.strokeStyle = '#ccc'; g.lineWidth = 2; g.strokeRect(fx + 1, fy + 1, F - 2, F - 2);
+    g.fillStyle = '#949294';   // darker corner marks inside the frame
+    for (const [x, y, dx, dy] of [[fx + 2, fy + 2, 1, 1], [fx + F - 4, fy + 2, -1, 1], [fx + 2, fy + F - 4, 1, -1],
+      [fx + F - 4, fy + F - 4, -1, -1]]) {
+      g.fillRect(dx > 0 ? x : x - 3, y, 5, 2);
+      g.fillRect(x, dy > 0 ? y : y - 3, 2, 5);
+    }
+  },
+  // place names on the world and underworld maps (where explored); titles that
+  // would overlap are pushed apart
+  titles(g, cur, ts, exp, showAll) {
+    const s = Settings.v, under = cur.area === 'under';
+    if (!(under ? s.underworldTitles : s.worldTitles)) return;
+    const list = [];
+    for (const loc of under ? UNDER_LOCS : WORLD_LOCS) {
+      const xy = U5.locXY(loc);
+      if (xy) list.push([xy[0], xy[1], LOC_NAMES[loc]]);
+    }
+    list.push(...EXTRA_TITLES[under ? 'under' : 'world']);
+    const fs = Math.round(11 * Math.max(1, g.canvas.width / 768));
+    g.font = `${fs}px Tahoma, Verdana, sans-serif`;
+    const boxes = [];
+    for (const [x, y, name] of list) {
+      if (!showAll && !exp[y * 256 + x]) continue;
+      const w = g.measureText(name).width + 2, h = fs + 5;
+      boxes.push({ name, x: x * ts + ts / 2 - w / 2, y: y * ts - h, w, h });
+    }
+    for (let it = 0; it < 40; it++) {
+      let moved = false;
+      for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        const dx = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), dy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+        if (dx <= 0 || dy <= 0) continue;
+        moved = true;
+        if (dx < dy) { const d = (dx + 1) / 2 * (a.x + a.w / 2 <= b.x + b.w / 2 ? 1 : -1); a.x -= d; b.x += d; }
+        else { const d = (dy + 1) / 2 * (a.y + a.h / 2 <= b.y + b.h / 2 ? 1 : -1); a.y -= d; b.y += d; }
+      }
+      if (!moved) break;
+    }
+    g.textAlign = 'left'; g.textBaseline = 'top';
+    for (const b of boxes) {
+      g.fillStyle = '#000'; g.fillText(b.name, Math.round(b.x) + 2, Math.round(b.y) + 3);
+      g.fillStyle = '#fff'; g.fillText(b.name, Math.round(b.x) + 1, Math.round(b.y) + 2);
+    }
+  },
+  // the zoom view: 11 x 11 tiles around the mouse at double size, in the half of
+  // the map away from the mouse; like the original it shows the map as it is
+  drawLens(g, cur, ts, size) {
+    const m = this.mouseCell, atlas = U5.tiles(), lt = size >= 600 ? 32 : 16, L = 11 * lt + 2;
+    const lx = Math.round((size - L) / 2), mid = size / 2;
+    const ly = Math.round(m.y * ts + ts / 2 < mid ? mid + 14 : mid - 14 - L);
+    g.fillStyle = '#000'; g.fillRect(lx, ly, L, L);
+    for (let r = 0; r < 11; r++) for (let k = 0; k < 11; k++) {
+      const t = cur.tiles[((m.y - 5 + r) & 255) * 256 + ((m.x - 5 + k) & 255)];
+      g.drawImage(atlas, (t % 32) * 16, (t >> 5) * 16, 16, 16, lx + 1 + k * lt, ly + 1 + r * lt, lt, lt);
+    }
+    g.strokeStyle = '#aaa'; g.lineWidth = 2; g.strokeRect(lx, ly, L, L);
+    g.strokeStyle = '#fff'; g.strokeRect(lx + 1 + 5 * lt, ly + 1 + 5 * lt, lt, lt);
+  },
+  // keeps the party in sight when the map is bigger than the window
+  follow([vx, vy], ts) {
+    const w = $('#mapwrap');
+    if (this.canvas.width <= w.clientWidth && this.canvas.height <= w.clientHeight) return;
+    const px = vx * ts, py = vy * ts, m = 3 * ts;
+    if (px < w.scrollLeft + m || px > w.scrollLeft + w.clientWidth - m) w.scrollLeft = px - w.clientWidth / 2;
+    if (py < w.scrollTop + m || py > w.scrollTop + w.clientHeight - m) w.scrollTop = py - w.clientHeight / 2;
+  },
+  // an NPC's name in the cell above it: white on black, like the original
+  label(g, text, cx, y, ts) {
+    const fs = Math.round(Math.max(10, Math.min(16, ts * 0.55)));
+    g.font = `${fs}px Tahoma, Verdana, sans-serif`;
+    const w = Math.ceil(g.measureText(text).width) + 10, h = Math.max(fs + 4, Math.round(ts));
+    const top = Math.round(y - h);
+    g.fillStyle = '#000'; g.fillRect(Math.round(cx - w / 2), top, w, h);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = '#fff'; g.fillText(text, cx, top + h / 2 + 1);
+  },
+  cellAt(ev) {
+    const cur = this.current();
+    if (!cur) return null;
+    const r = this.canvas.getBoundingClientRect(), ts = this.canvas.width / cur.n;
+    const x = Math.floor((ev.clientX - r.left) / ts), y = Math.floor((ev.clientY - r.top) / ts);
+    if (x < 0 || y < 0 || x >= cur.n || y >= cur.n) return null;
+    return { vx: x, vy: y, x, y, cur };
+  },
+};
+
+/* -------------------------------------------------------- title bar */
+
+function updateTitle() {
+  if (!Game.save) return;
+  const a = Game.area(), m = Render.mouse && Render.mouseCell;
+  let t;
+  if (a === 'world') t = `World - ${pad3(Game.x)},${pad3(Game.y)}`;
+  else if (a === 'under') t = `Underworld - ${pad3(Game.x)},${pad3(Game.y)}`;
+  else if (a === 'combat') t = 'Combat';
+  else if (a === 'dungeon') t = `Dungeon ${LOC_NAMES[Game.loc]} - Level ${Game.z + 1} - ${pad3(Game.x)},${pad3(Game.y)}`;
+  else t = `${LOC_NAMES[Game.loc] || 'Location ' + Game.loc} - ${Game.z < 0 ? 'Basement' : 'Level ' + (Game.z + 1)} - ${pad3(Game.x)},${pad3(Game.y)}`;
+  if (m) t += ` - ${pad3(m.x)},${pad3(m.y)}`;
+  $('#title').textContent = t;
+  document.title = t + ' - Ultimapper 5';
+}
+
+/* ------------------------------------------------------- main loop */
+
+let lastArea = '', lastGems = -1;
+
+async function loop() {
+  Settings.load();
+  await Files.loadCached().catch(() => {});
+  const dataUrl = new URLSearchParams(location.search).get('data');
+  if (dataUrl) await Files.importUrl(dataUrl).catch(e => log(e.message));
+  try {
+    Game.info = await Api.info();
+  } catch {
+    $('#conn').textContent = 'no API';
+    $('#conn').className = 'chip bad';
+    $('#msg').innerHTML = '<h2>DOSBox Staging\'s API is not reachable</h2><p>Open this page through DOSBox Staging\'s ' +
+      'webserver, e.g. <b>http://localhost:8086/ultimapper5.html</b>, with <code>webserver_enabled = on</code> ' +
+      'in its config.</p>';
+    return;
+  }
+  for (;;) {
+    try {
+      if (Game.base === null) {
+        setConn('searching', 'warn');
+        $('#msg').innerHTML = Game.save ? '' : '<h2>Waiting for Ultima V</h2><p>Start the game and choose ' +
+          '<i>Journey Onward</i>. Ultimapper finds it by itself.</p>';
+        Game.base = await Game.find();
+        if (Game.base === null) { await sleep(2000); continue; }
+        log(`Ultima V found: data segment ${hex(Game.base >> 4)} (linear ${hex(Game.base, 6)})`);
+      }
+      const d = await Game.poll();
+      if (d.save[0x2B5] < 1 || d.save[0x2B5] > 6) { Game.base = null; continue; }
+      const prevSave = Game.save;
+      Object.assign(Game, d);
+      Game.lastOk = Date.now();
+      setConn(`DOSBox ${Game.info.version.split(' ')[0]}`, 'ok');
+      onUpdate(prevSave);
+    } catch (e) {
+      setConn('DOSBox not answering', 'bad');
+      Game.base = null;
+      await sleep(1500);
+    }
+    await sleep(Quickfight.on ? 60 : 150);
+  }
+}
+
+function setConn(text, cls) { const c = $('#conn'); c.textContent = text; c.className = 'chip ' + cls; }
+
+function onUpdate(prev) {
+  const area = Game.areaKey();
+  if (area !== lastArea) { if (lastArea) log(`Location: ${$('#title').textContent}`); lastArea = area; Render.dirty = true; }
+  if (Game.area() !== 'dungeon' || true) markVisible();
+  const gems = Game.save[0x207];
+  if (Settings.v.peerExplore && lastGems >= 0 && gems < lastGems) {   // a gem was used: the area was shown
+    if (Game.area() === 'small' || Game.area() === 'dungeon') Explored.fill(Game.areaKey(), 1);
+    else for (let dy = -16; dy < 16; dy++) for (let dx = -16; dx < 16; dx++) Explored.mark(Game.areaKey(), Game.x + dx, Game.y + dy);
+    log('Gem used: area marked as explored');
+  }
+  lastGems = gems;
+  if (Settings.v.autoLevelUp) AutoLevel.check();
+  Quickfight.tick();
+  Hud.draw();
+  updateTitle();
+  Render.draw();
+  Lists.refresh();
+}
+
+/* ---------------------------------------------------------- events */
+
+const cv = Render.canvas;
+cv.addEventListener('mousemove', ev => {
+  const c = Render.cellAt(ev);
+  Render.mouse = c ? [c.vx, c.vy] : null;
+  Render.mouseCell = c;
+  showTip(ev, c);
+  updateTitle();
+  Render.draw();
+});
+cv.addEventListener('mouseleave', () => { Render.mouse = null; $('#tip').style.display = 'none'; Render.draw(); });
+cv.addEventListener('click', async ev => {
+  const c = Render.cellAt(ev);
+  if (!c) return;
+  if (ev.ctrlKey) { await teleport(c); return; }
+  if (Quickfight.on) { Quickfight.stop(); return; }
+  if (c.cur.area === 'combat') {   // a party member's square opens the editor
+    const u = Game.combatants().find(u => u.pc && u.x === c.x && u.y === c.y);
+    if (u) Editor.open(u.pc.index);
+    return;
+  }
+  if (c.cur.n === 256) { Render.lens = !Render.lens; Render.mouse = [c.vx, c.vy]; Render.mouseCell = c; Render.draw(); }
+});
+cv.addEventListener('contextmenu', ev => { ev.preventDefault(); Menu.show(ev.clientX, ev.clientY); });
+$('#menuBtn').onclick = ev => { const r = ev.target.getBoundingClientRect(); Menu.show(r.right - 240, r.bottom); };
+window.addEventListener('resize', () => { Render.dirty = true; Render.draw(); });
+
+function showTip(ev, c) {
+  const tip = $('#tip');
+  if (!c || !Game.save) { tip.style.display = 'none'; return; }
+  const lines = [`${pad3(c.x)},${pad3(c.y)}`];
+  if (c.cur.tiles) lines[0] += `  tile ${hex(c.cur.tiles[c.y * c.cur.n + c.x], 2)}`;
+  if (c.cur.cells) lines[0] += `  cell ${hex(c.cur.cells[c.y * 8 + c.x], 2)}`;
+  if (c.cur.area === 'combat') {
+    for (const u of Game.combatants()) if (u.x === c.x && u.y === c.y)
+      lines.push(u.pc ? `${u.pc.name}  HP ${u.hp} / ${u.pc.maxhp}` : `Monster (sprite ${hex(u.tile, 3)})  HP ${u.hp}`);
+    tip.textContent = lines.join('\n');
+    tip.style.display = 'block';
+    tip.style.left = ev.clientX + 14 + 'px';
+    tip.style.top = ev.clientY + 14 + 'px';
+    return;
+  }
+  const units = Game.save.subarray(0x6B4, 0x6B4 + 256);
+  for (let i = 1; i < 32; i++) {
+    const u = units.subarray(i * 8, i * 8 + 8);
+    if ((u[0] || u[1]) && u[2] === c.x && u[3] === c.y) {
+      const name = c.cur.area === 'small' ? U5.npcName(Game.loc, i) : '';
+      lines.push(`${name || 'unit ' + i} (sprite ${hex(0x100 + u[0], 3)})`);
+    }
+  }
+  if (c.cur.n === 256) for (let loc = 1; loc <= 40; loc++) {
+    const xy = U5.locXY(loc);
+    if (xy && xy[0] === c.x && xy[1] === c.y && (c.cur.area === 'under') === (loc >= 33)) lines.push(LOC_NAMES[loc]);
+  }
+  tip.textContent = lines.join('\n');
+  tip.style.display = 'block';
+  tip.style.left = ev.clientX + 14 + 'px';
+  tip.style.top = ev.clientY + 14 + 'px';
+}
+
+document.addEventListener('keydown', ev => {
+  if (ev.target.closest('input, select, textarea')) return;
+  if (Quickfight.on && !ev.ctrlKey) { Quickfight.stop(); ev.preventDefault(); return; }
+  const k = ev.key.toLowerCase();
+  const act = ev.ctrlKey ? { d: toggleDebug, e: () => Editor.open(), t: forwardTime, x: exitCombat, l: () => LogWin.open(),
+    s: backupSaves, q: quit, '.': () => Quickfight.toggle() }[k]
+    : { s: () => Lists.open('spells'), i: () => Lists.open('inventory'), q: () => Quickfight.toggle(),
+      pageup: () => zoomBy(+1), pagedown: () => zoomBy(-1), escape: () => { Menu.hide(); Dlg.closeTop(); } }[k];
+  if (act) { ev.preventDefault(); act(); }
+});
+
+function zoomBy(d) {
+  const cur = Render.current();
+  let z = Settings.v.zoom || Render.tileSize(cur ? cur.n : 32);
+  z = Math.max(1, Math.min(48, z + d * (z >= 8 ? 2 : 1)));
+  Settings.v.zoom = z; Settings.save(); Render.dirty = true; Render.draw();
+}
+
+/* ------------------------------------------------------------ menu */
+
+const Menu = {
+  root: null,
+  items() {
+    const s = Settings.v, chk = k => ({ checked: s[k], act: () => { s[k] = !s[k]; Settings.save(); Render.dirty = true; Render.draw(); Hud.last = ''; Hud.draw(); } });
+    const sizeTo = n => () => { const cur = Render.current(); Settings.v.zoom = Math.max(1, Math.round(n / (cur ? cur.n : 32))); Settings.save(); Render.draw(); };
+    return [
+      { label: 'Window', sub: [
+        { label: 'Size to 512', act: sizeTo(512) }, { label: 'Size to 768', act: sizeTo(768) },
+        { label: 'Size to 1024', act: sizeTo(1024) }, { label: 'Fit to window', act: () => { Settings.v.zoom = 0; Settings.save(); Render.draw(); } },
+        '-', { label: 'Decrease size', key: 'PgDn', act: () => zoomBy(-1) }, { label: 'Increase size', key: 'PgUp', act: () => zoomBy(+1) },
+        '-', { label: 'Show HUD', ...chk('hud') },
+        { label: 'Open in its own window', act: () => window.open(location.href, 'ultimapper5', 'popup,width=1100,height=900') }] },
+      '-',
+      { label: 'Map exploration', sub: [
+        { label: 'World explored', ...chk('worldExplored') }, { label: 'Underworld explored', ...chk('underworldExplored') },
+        { label: 'Towns explored', ...chk('townsExplored') }, { label: 'Dungeons explored', ...chk('dungeonsExplored') },
+        '-', { label: 'Explore area', act: () => Game.save && Explored.fill(Game.areaKey(), 1) },
+        { label: 'Unexplore area', act: () => Game.save && Explored.fill(Game.areaKey(), 0) },
+        '-', { label: 'Unexplore all', act: () => confirm('Forget everything explored so far?') && Explored.clearAll() },
+        '-', { label: 'Explore when gem / spell used', ...chk('peerExplore') }] },
+      { label: 'Map elements', sub: [
+        { label: 'World titles', ...chk('worldTitles') }, { label: 'Underworld titles', ...chk('underworldTitles') },
+        '-', { label: 'NPC names', ...chk('npcNames') }, '-', { label: 'Party location', ...chk('partyLocation') }] },
+      '-',
+      { label: 'Quickfight', sub: [
+        { label: 'Change interval', act: () => { const v = prompt('Interval between keypresses (ms):', s.qfInterval); if (v && +v >= 50) { s.qfInterval = +v; Settings.save(); } } },
+        '-', { label: 'Insta-aiming', ...chk('qfAim') },
+        { label: 'Toggle quickfight', key: 'Q', act: () => Quickfight.toggle() }] },
+      '-', { label: 'Auto level up', ...chk('autoLevelUp') },
+      '-', { label: 'Inventory', key: 'I', act: () => Lists.open('inventory') },
+      { label: 'Spells', key: 'S', act: () => Lists.open('spells') },
+      '-',
+      { label: 'Manuals', sub: [
+        { label: 'Ultimapper 5', act: () => Help.open() }, '-',
+        ...Object.entries({ manual: 'Manual', ref: 'Reference card', lore: 'Book of Lore', spellbook: 'Spellbook',
+          cluebook: 'Cluebook' }).map(([k, l]) => ({ label: l, act: () => openPdf(k) }))] },
+      '-', { label: 'Save map as image', act: saveMapImage },
+      '-', { label: 'Backup saved game', key: 'Ctrl+S', act: backupSaves },
+      '-', { label: 'Game folder…', act: () => pickFolder() },
+      '-',
+      { label: 'Debug', sub: [
+        { label: 'Debug-mode', key: 'Ctrl+D', checked: s.debug, act: toggleDebug }, '-',
+        { label: 'Editor', key: 'Ctrl+E', act: () => Editor.open() }, '-',
+        { label: 'Forward time by 1 hour', key: 'Ctrl+T', act: forwardTime }, '-',
+        { label: 'Exit combat', key: 'Ctrl+X', act: exitCombat }, '-',
+        { label: 'Dump TLK during talk', act: dumpTlk }, '-',
+        { label: 'Dump memory to file', act: dumpMemory }, '-',
+        { label: 'Debug log', key: 'Ctrl+L', act: () => LogWin.open() }] },
+      '-', { label: 'Quit', key: 'Ctrl+Q', act: quit },
+    ];
+  },
+  build(items, x, y, parent) {
+    const m = el('div', { className: 'menu' });
+    for (const it of items) {
+      if (it === '-') { m.append(el('div', { className: 'sep' })); continue; }
+      const mi = el('div', { className: 'mi' + (it.checked ? ' chk' : '') + (it.sub ? ' sub' : '') + (it.disabled ? ' dis' : '') },
+        el('span', { textContent: it.label }), el('span', { className: 'k', textContent: it.key || '' }));
+      if (it.sub) mi.onmouseenter = () => {
+        m.querySelectorAll('.mi.open').forEach(o => o.classList.remove('open'));
+        m.querySelectorAll(':scope ~ .menu').forEach(o => o.remove());
+        this.closeFrom(m);
+        mi.classList.add('open');
+        const r = mi.getBoundingClientRect();
+        this.build(it.sub, r.right - 2, r.top - 4, m);
+      };
+      else mi.onmouseenter = () => { m.querySelectorAll('.mi.open').forEach(o => o.classList.remove('open')); this.closeFrom(m); };
+      if (!it.sub && !it.disabled) mi.onclick = () => { this.hide(); it.act(); };
+      m.append(mi);
+    }
+    document.body.append(m);
+    m.dataset.level = parent ? +parent.dataset.level + 1 : 0;
+    const r = m.getBoundingClientRect();
+    m.style.left = Math.max(0, Math.min(x, innerWidth - r.width - 2)) + 'px';
+    m.style.top = Math.max(0, Math.min(y, innerHeight - r.height - 2)) + 'px';
+    return m;
+  },
+  closeFrom(m) {
+    const lvl = +m.dataset.level;
+    document.querySelectorAll('.menu').forEach(o => { if (+o.dataset.level > lvl) o.remove(); });
+  },
+  show(x, y) { this.hide(); this.build(this.items(), x, y, null); },
+  hide() { document.querySelectorAll('.menu').forEach(m => m.remove()); },
+};
+document.addEventListener('mousedown', ev => { if (!ev.target.closest('.menu')) Menu.hide(); });
+
+/* --------------------------------------------------------- dialogs */
+
+const Dlg = {
+  z: 40,
+  make(id, title, w) {
+    let d = document.getElementById(id);
+    if (d) { d.style.zIndex = ++this.z; return d; }
+    d = el('div', { id, className: 'dlg' });
+    const head = el('header', {}, el('span', { className: 't', textContent: title }),
+      el('button', { textContent: '✕', onclick: () => d.remove() }));
+    const body = el('div', { className: 'body' });
+    d.append(head, body);
+    d.style.width = w + 'px';
+    d.style.left = Math.max(10, (innerWidth - w) / 2) + 'px';
+    d.style.top = '60px';
+    d.style.zIndex = ++this.z;
+    document.body.append(d);
+    let drag = null;
+    head.onmousedown = e => { if (e.target.tagName === 'BUTTON') return; drag = [e.clientX - d.offsetLeft, e.clientY - d.offsetTop]; d.style.zIndex = ++this.z; };
+    document.addEventListener('mousemove', e => { if (drag) { d.style.left = e.clientX - drag[0] + 'px'; d.style.top = e.clientY - drag[1] + 'px'; } });
+    document.addEventListener('mouseup', () => drag = null);
+    return d;
+  },
+  closeTop() {
+    const all = [...document.querySelectorAll('.dlg')];
+    if (all.length) all.sort((a, b) => b.style.zIndex - a.style.zIndex)[0].remove();
+  },
+};
+
+// spells by circle, then by name, as the original lists them (indexes into SPELLS)
+const SPELL_ORDER = SPELLS.map((_, i) => i).sort((a, b) => SPELLS[a][1] - SPELLS[b][1] || SPELLS[a][0].localeCompare(SPELLS[b][0]));
+
+// the spell list and the inventory share one window, like the original's
+const Lists = {
+  mode: null, sel: 0,
+  open(mode) {
+    this.mode = mode;
+    const d = Dlg.make('lists', '', mode === 'spells' ? 640 : 780);
+    d.style.width = (mode === 'spells' ? 640 : 780) + 'px';
+    d.querySelector('.t').textContent = mode === 'spells' ? 'Spells' : 'Inventory';
+    d.tabIndex = 0;
+    d.onkeydown = e => {
+      if (e.key === 'Tab') { e.preventDefault(); this.open(this.mode === 'spells' ? 'inventory' : 'spells'); }
+      if (this.mode === 'spells') {
+        if (e.key === 'ArrowDown') { this.sel = Math.min(47, this.sel + 1); this.refresh(true); e.preventDefault(); }
+        if (e.key === 'ArrowUp') { this.sel = Math.max(0, this.sel - 1); this.refresh(true); e.preventDefault(); }
+        if (e.key === 'Enter') mixSpell(SPELL_ORDER[this.sel]);
+      }
+    };
+    d.oncontextmenu = e => { e.preventDefault(); this.open(this.mode === 'spells' ? 'inventory' : 'spells'); };
+    d.focus();
+    this.refresh(true);
+  },
+  refresh(force) {
+    const d = document.getElementById('lists');
+    if (!d || !Game.save) return;
+    const s = Game.save, body = d.querySelector('.body');
+    const sig = this.mode + s.subarray(0x202, 0x2B2).join() + this.sel;
+    if (!force && sig === this.sig) return;
+    this.sig = sig;
+    body.replaceChildren(this.mode === 'spells' ? this.spells(s) : this.inventory(s));
+  },
+  // L, N, spell, effect, how many can be mixed, the reagents (green: have some, red: none)
+  spells(s) {
+    const t = el('table', { className: 'list spells' }), have = r => s[0x2AA + r];
+    t.append(el('tr', {}, ...['L', 'N', 'SPELL', 'EFFECT', 'CAN MIX', ...REAGENT_ABBR.map(a => a.toUpperCase())]
+      .map((h, k) => el('th', { textContent: h, className: k < 2 || k > 3 ? 'c' : '' }))));
+    t.append(el('tr', { className: 'counts' }, el('td', { colSpan: 5 }),
+      ...REAGENT_ABBR.map((_, r) => el('td', { className: 'c', textContent: have(r) || '-' }))));
+    SPELL_ORDER.forEach((i, row) => {
+      const [name, circle, mask, effect] = SPELLS[i], n = s[0x24A + i];
+      const need = REAGENT_ABBR.map((_, r) => mask >> r & 1);
+      const can = Math.min(99 - n, ...need.map((x, r) => x ? have(r) : Infinity));
+      const tr = el('tr', { className: (row === this.sel ? 'sel ' : '') + (n ? 'known' : 'na'),
+        onclick: () => { this.sel = row; mixSpell(i); } },
+        el('td', { className: 'c', textContent: circle }), el('td', { className: 'c', textContent: n }),
+        el('td', { textContent: name }), el('td', { textContent: effect }),
+        el('td', { className: 'c mix', textContent: can > 0 && can !== Infinity ? can : '-' }),
+        ...need.map((x, r) => el('td', { className: 'c ' + (x ? (have(r) ? 'got' : 'miss') : ''), textContent: x ? REAGENT_ABBR[r] : '-' })));
+      t.append(tr);
+    });
+    return t;
+  },
+  // every item in three columns of groups, the ones the party has bright
+  inventory(s) {
+    const box = el('div', { className: 'inv' });
+    for (const col of INVENTORY) {
+      const c = el('div');
+      for (const [title, items] of col) {
+        c.append(el('h4', { textContent: title }));
+        for (const [off, name, note] of items) {
+          const n = s[off] === 0xFF ? 1 : s[off];   // the pocket watch is FF when owned
+          c.append(el('div', { className: n ? 'got' : '' }, el('span', { className: 'n', textContent: n || '-' }),
+            el('span', { textContent: name }), ...(note ? [el('span', { className: 'note', textContent: `(${note})` })] : [])));
+        }
+      }
+      box.append(c);
+    }
+    return box;
+  },
+};
+
+// mixes one of spell i, using one of each of its reagents (like the game's Mix command)
+async function mixSpell(i) {
+  const [name, , mask] = SPELLS[i], s = Game.save;
+  const rs = REAGENTS.map((_, r) => mask >> r & 1);
+  if (rs.some((need, r) => need && !s[0x2AA + r])) { log(`Not enough reagents for ${name}`); return; }
+  if (s[0x24A + i] >= 99) return;
+  const reag = [...s.subarray(0x2AA, 0x2B2)].map((v, r) => v - rs[r]);
+  await Game.writeSave(0x2AA, reag);
+  await Game.writeSave(0x24A + i, [s[0x24A + i] + 1]);
+  log(`Mixed ${name} (${s[0x24A + i]} now)`);
+  Lists.refresh(true);
+}
+
+/* ----------------------------------------------------------- editor */
+
+const Editor = {
+  cur: 0,
+  open(index) {
+    if (!Game.save) return;
+    if (index !== undefined) this.cur = index;
+    const d = Dlg.make('editor', 'Editor', 640);
+    this.render(d.querySelector('.body'));
+  },
+  render(body) {
+    const s = Game.save;
+    const chars = el('div', { className: 'chars' });
+    for (let i = 0; i < 16; i++) {
+      const o = 2 + i * 32;
+      let name = ''; for (let k = 0; k < 9 && s[o + k]; k++) name += String.fromCharCode(s[o + k]);
+      const st = s[o + 0x1F] === 0 ? 'party' : s[o + 0x1F] === 0xFF ? '' : 'inn';
+      chars.append(el('button', { className: i === this.cur ? 'sel' : '', textContent: `${name || '-'} ${st ? '(' + st + ')' : ''}`,
+        onclick: () => { this.cur = i; this.render(body); } }));
+    }
+    const o = 2 + this.cur * 32, f = el('div');
+    const num = (label, off, size = 1, max = size === 1 ? 255 : 9999) => {
+      const v = size === 1 ? s[o + off] : s[o + off] | s[o + off + 1] << 8;
+      const inp = el('input', { type: 'number', min: 0, max, value: v });
+      inp.onchange = () => {
+        const n = Math.max(0, Math.min(max, +inp.value | 0));
+        Game.writeSave(o + off, size === 1 ? [n] : [n & 255, n >> 8]).then(() => log(`${label} = ${n}`));
+      };
+      return el('label', {}, el('span', { textContent: label }), inp);
+    };
+    const pick = (label, off, options) => {
+      const sel = el('select');
+      for (const [v, n] of options) sel.append(el('option', { value: v, textContent: n, selected: s[o + off] === v }));
+      sel.onchange = () => Game.writeSave(o + off, [+sel.value]).then(() => log(`${label} = ${sel.selectedOptions[0].textContent}`));
+      return el('label', {}, el('span', { textContent: label }), sel);
+    };
+    const eqOpts = (from, to) => [[0xFF, '(none)'], ...ITEMS.slice(from, to).map((n, k) => [from + k, n])];
+    const hands = [...eqOpts(16, 42), ...eqOpts(4, 9).slice(1)];   // either hand: any weapon or shield, like the original
+    f.append(
+      pick('Gender', 0x09, [[0x0B, 'Male'], [0x0C, 'Female']]),
+      pick('Class', 0x0A, Object.entries(CLASSES).map(([k, v]) => [+k, v])),
+      pick('Status', 0x0B, Object.entries(STATUS).map(([k, v]) => [+k, v])),
+      num('Strength', 0x0C), num('Dexterity', 0x0D), num('Intelligence', 0x0E), num('Magic points', 0x0F),
+      num('Hit points', 0x10, 2, 999), num('Max hit points', 0x12, 2, 999), num('Experience', 0x14, 2, 9999),
+      num('Level', 0x16, 1, 8),
+      pick('Helm', 0x19, eqOpts(0, 4)), pick('Armour', 0x1A, eqOpts(9, 16)), pick('Weapon', 0x1B, hands),
+      pick('Shield', 0x1C, hands), pick('Ring', 0x1D, eqOpts(42, 45)), pick('Amulet', 0x1E, eqOpts(45, 48)),
+      num('Unknown (17)', 0x17), num('Unknown (18)', 0x18),
+      pick('Party', 0x1F, [[0, 'In the party'], [0xFF, 'Not joined'], [1, 'At an inn']]));
+    // party inventory
+    const inv = el('div', { style: 'margin-top:10px' }, el('div', { className: 'muted', textContent: 'Party inventory' }));
+    const invGrid = el('div', { className: 'grid2' });
+    const invNum = (label, off, size = 1, max = size === 1 ? 99 : 9999) => {
+      const v = size === 1 ? s[off] : s[off] | s[off + 1] << 8;
+      const inp = el('input', { type: 'number', min: 0, max, value: v });
+      inp.onchange = () => { const n = Math.max(0, Math.min(max, +inp.value | 0)); Game.writeSave(off, size === 1 ? [n] : [n & 255, n >> 8]).then(() => log(`${label} = ${n}`)); };
+      invGrid.append(el('span', { textContent: label }), inp);
+    };
+    invNum('Food', 0x202, 2); invNum('Gold', 0x204, 2);
+    for (const [off, n, flag] of SPECIAL) {
+      if (!flag) { invNum(n, off, 1, 99); continue; }
+      const cb = el('input', { type: 'checkbox', checked: !!s[off] });   // quest items: had or not
+      cb.onchange = () => Game.writeSave(off, [cb.checked ? (off === 0x217 ? 0xFF : 1) : 0]).then(() => log(`${n} ${cb.checked ? 'given' : 'taken'}`));
+      invGrid.append(el('span', { textContent: n }), cb);
+    }
+    ITEMS.forEach((n, i) => invNum(n, 0x21A + i));
+    SCROLLS.forEach((n, i) => invNum('Scroll: ' + n, 0x27A + i));
+    POTIONS.forEach((n, i) => invNum(n + ' potion', 0x282 + i));
+    REAGENTS.forEach((n, i) => invNum(n, 0x2AA + i));
+    SPELLS.forEach(([n], i) => invNum('Spell: ' + n, 0x24A + i));
+    invNum('Karma', 0x2E2, 1, 99);
+    inv.append(invGrid);
+    body.replaceChildren(el('div', { className: 'ed' }, chars, el('div', {}, f, inv)));
+  },
+};
+
+/* ------------------------------------------------------ auto level */
+
+// like the original: level + 1, hit points and their maximum = level x 30,
+// one of STR / DEX / INT + 1
+const AutoLevel = {
+  check() {
+    for (const p of Game.party()) {
+      if (p.level >= 8 || p.status === 0x44) continue;
+      if (p.xp < LEVEL_XP[p.level]) continue;
+      const stat = 0x0C + Math.floor(Math.random() * 3);
+      const o = p.off, level = p.level + 1, hp = Math.min(240, level * 30);
+      Game.writeSave(o + 0x16, [level]);
+      Game.writeSave(o + 0x10, [hp & 255, hp >> 8, hp & 255, hp >> 8]);
+      Game.writeSave(o + stat, [Math.min(50, Game.save[o + stat] + 1)]);
+      log(`${p.name} reached experience level ${level}. Increased ${['STR', 'DEX', 'INT'][stat - 0x0C]}.`);
+    }
+  },
+};
+
+/* ------------------------------------------------------- quickfight
+ * Keys go into the BIOS keyboard buffer through the memory API, so the game
+ * window doesn't have to have the focus. */
+
+const BIOS_HEAD = 0x41A, BIOS_TAIL = 0x41C;
+async function pushKey(scan, ascii) {
+  const b = await Api.read(BIOS_HEAD, 4);
+  const head = b[0] | b[1] << 8, tail = b[2] | b[3] << 8;
+  const next = tail + 2 >= 0x3E ? 0x1E : tail + 2;
+  if (next === head) return false;
+  await Api.write(0x400 + tail, Uint8Array.of(ascii, scan));
+  await Api.write(BIOS_TAIL, Uint8Array.of(next & 255, next >> 8));
+  return true;
+}
+const KEYS = { up: [0x48, 0], down: [0x50, 0], left: [0x4B, 0], right: [0x4D, 0], enter: [0x1C, 13], esc: [0x01, 27],
+  a: [0x1E, 0x61], space: [0x39, 0x20] };
+
+/* Quickfight: on a party member's turn, attack the nearest monster (A and a
+ * direction when next to it, A and aim with a ranged weapon in range) or step
+ * towards it. Insta-aiming writes the crosshair (save 2F3/2F4, set by the game
+ * after A; 2F2 = 1 while aiming) instead of moving it with the arrow keys. */
+const AMMO = { 26: 27, 28: 29, 36: -1 };   // bow: arrows, crossbow: quarrels, magic bow: none needed
+const Quickfight = {
+  on: false, next: 0, busy: false, last: null,
+  toggle() { this.on ? this.stop() : this.start(); },
+  start() { this.on = true; $('#qf').classList.remove('hidden'); log('Quickfight on'); },
+  stop() { this.on = false; $('#qf').classList.add('hidden'); log('Quickfight off'); },
+  range(item) {
+    const ovl = Files.data['DATA.OVL'];
+    if (!ovl || item === 0xFF) return 0;
+    const ammo = AMMO[item];
+    if (ammo > 0 && !Game.save[0x21A + ammo]) return 0;   // no arrows / quarrels
+    return ovl[0x1674 + item];
+  },
+  async keys(...list) { for (const k of list) { await pushKey(...k); await sleep(Settings.v.qfInterval / 3); } },
+  tick() {
+    if (!this.on || this.busy || Date.now() < this.next || Game.area() !== 'combat') return;
+    this.next = Date.now() + Settings.v.qfInterval;
+    const party = Game.party(), turn = Game.save[0x2F8];
+    if (turn >= party.length) return;   // a monster's turn
+    this.busy = true;
+    this.act(party[turn]).catch(e => log('Quickfight: ' + e.message)).finally(() => { this.busy = false; });
+  },
+  async act(pc) {
+    const b = await Api.read(BIOS_HEAD, 4);
+    if ((b[0] | b[1] << 8) !== (b[2] | b[3] << 8)) return;   // the game hasn't taken the last keys yet
+    const all = Game.combatants(), me = all.find(u => u.active), foes = all.filter(u => !u.pc && u.hp > 0);
+    if (!me || !foes.length) return;
+    const dist = u => Math.max(Math.abs(u.x - me.x), Math.abs(u.y - me.y));
+    const foe = foes.reduce((a, u) => dist(u) < dist(a) ? u : a);
+    const dx = foe.x - me.x, dy = foe.y - me.y, d = dist(foe);
+    const dirKey = (x, y) => x > 0 ? KEYS.right : x < 0 ? KEYS.left : y > 0 ? KEYS.down : KEYS.up;
+    const range = this.range(pc.eq[2]);
+    if (Math.abs(dx) + Math.abs(dy) === 1) {
+      log(`Quickfight: ${pc.name} attacks the monster at ${foe.x},${foe.y}`);
+      await this.keys(KEYS.a, dirKey(dx, dy));
+    } else if (range > 1 && d <= range) {
+      log(`Quickfight: ${pc.name} shoots at ${foe.x},${foe.y}`);
+      await pushKey(...KEYS.a);
+      for (let t = 0; t < 20 && (await Api.read(Game.base + SAVE + 0x2F2, 1))[0] !== 1; t++) await sleep(50);
+      if (Settings.v.qfAim) await Api.write(Game.base + SAVE + 0x2F3, Uint8Array.of(foe.x, foe.y));
+      else {
+        const keys = [];
+        for (let k = 0; k < Math.abs(dx); k++) keys.push(dirKey(dx, 0));
+        for (let k = 0; k < Math.abs(dy); k++) keys.push(dirKey(0, dy));
+        await this.keys(...keys);
+      }
+      await this.keys(KEYS.enter);
+    } else {
+      // step towards it along the longer axis; if that didn't move us last time, the other one
+      const blocked = this.last && this.last.i === me.i && this.last.x === me.x && this.last.y === me.y;
+      const longX = Math.abs(dx) >= Math.abs(dy), useX = blocked ? !this.last.useX : longX;
+      const key = useX && dx ? dirKey(dx, 0) : dy ? dirKey(0, dy) : dirKey(dx, 0);
+      this.last = { i: me.i, x: me.x, y: me.y, useX };
+      log(`Quickfight: ${pc.name} moves towards ${foe.x},${foe.y}`);
+      await this.keys(key);
+    }
+  },
+};
+
+/* --------------------------------------------------- debug actions */
+
+// like the original: the position, and on the world maps the 2x2 chunks the
+// game keeps in memory (DS:6618, chunk order) with their origin at 2F5/2F6
+async function teleport(c) {
+  if (!Settings.v.debug) { log('Teleporting needs debug mode (Ctrl+D)'); return; }
+  await Game.writeSave(0x2F0, [c.x, c.y]);
+  const area = Game.area();
+  if (area === 'world' || area === 'under') {
+    const ox = c.x & 0xF0, oy = c.y & 0xF0, m = U5.large(area === 'under'), buf = new Uint8Array(1024);
+    for (let ch = 0; ch < 4; ch++) for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++)
+      buf[ch * 256 + y * 16 + x] = m[((oy + (ch >> 1) * 16 + y) & 255) * 256 + ((ox + (ch & 1) * 16 + x) & 255)];
+    await Game.writeSave(0x2F5, [ox, oy]);
+    await Api.write(Game.base + MAPBUF, buf);
+  }
+  log(`Teleported to ${pad3(c.x)},${pad3(c.y)}`);
+}
+
+async function forwardTime() {
+  if (!Game.save) return;
+  const s = Game.save;
+  let hour = s[0x2D9] + 1, day = s[0x2D8], month = s[0x2D7], year = s[0x2CE] | s[0x2CF] << 8;
+  if (hour > 23) {
+    hour = 0; day++;
+    if (day > 28) { day = 1; month++; }
+    if (month > 13) { month = 1; year++; }
+    await Game.writeSave(0x2CE, [year & 255, year >> 8]);
+    await Game.writeSave(0x2D7, [month, day]);
+  }
+  await Game.writeSave(0x2D9, [hour, hour]);
+  log(`Time is now ${hour}:${String(s[0x2DB]).padStart(2, '0')}, ${month}-${day}-${year}`);
+}
+
+// what the original writes: 1 at 2FD, which lets Esc at the combat prompt
+// escape (dungeon rooms excepted); then Esc goes into the keyboard buffer
+async function exitCombat() {
+  if (!Game.save || Game.area() !== 'combat') { log('Exit combat: not in combat'); return; }
+  await Game.writeSave(0x2FD, [1]);
+  await pushKey(...KEYS.esc);
+  log('Exit combat');
+}
+// during a conversation the game has the NPC's script at DS:B22E; like the
+// original, find that script in the TLK files and dump it to the log
+const TALK_BUFFER = 0xB22E;
+async function dumpTlk() {
+  if (!Game.save) return;
+  const mem = await Api.read(Game.base + TALK_BUFFER, 1000);
+  const hit = tlkEntries().find(e => {
+    const n = Math.min(e.bytes.length, 64);
+    for (let i = 0; i < n; i++) if (e.bytes[i] !== mem[i]) return false;
+    return n > 8;
+  });
+  if (!hit) { log('Could not find a proper TLK-entry!'); return; }
+  LogWin.open();
+  log(decodeTlk(hit.bytes).join('\n'), true);
+}
+
+async function dumpMemory() {
+  const size = await Api.memSize();
+  const parts = [];
+  for (let a = 0; a < size; a += 1 << 20) parts.push(await Api.read(a, Math.min(1 << 20, size - a)));
+  download(new Blob(parts), 'u5_memory.bin');
+  log(`Memory dumped (${size} bytes)`);
+}
+
+function toggleDebug() {
+  Settings.v.debug = !Settings.v.debug; Settings.save();
+  $('#dbg').classList.toggle('hidden', !Settings.v.debug);
+  log('Debug mode ' + (Settings.v.debug ? 'on' : 'off'));
+  Render.dirty = true; Render.draw();
+}
+
+function quit() { Quickfight.stop(); window.close(); }
+
+/* ----------------------------------------------------- files, misc */
+
+function pickFolder() {
+  const inp = $('#folderInput');
+  inp.value = '';
+  inp.onchange = async () => {
+    try { await Files.importList(inp.files); log('Game files imported'); Render.dirty = true; Render.draw(); }
+    catch (e) { alert(e.message); }
+  };
+  inp.click();
+}
+
+async function openPdf(key) {
+  const f = await DB.get('files', 'PDF:' + key);
+  if (!f) { alert(`${MANUALS[key]} wasn't in the game folder when it was chosen.`); return; }
+  window.open(URL.createObjectURL(new Blob([f], { type: 'application/pdf' })), '_blank');
+}
+
+function download(blob, name) {
+  const a = el('a', { href: URL.createObjectURL(blob), download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+function saveMapImage() {
+  Render.canvas.toBlob(b => download(b, ($('#title').textContent.split(' - ')[0] || 'map').replace(/[^\w ]+/g, '') + '.png'));
+}
+
+// backs up the saved game files: a zip download of the game folder's save files
+async function backupSaves() {
+  let files = Files.saveSnapshot;
+  if (!files) {
+    alert('Choose the game folder again: the backup takes the saved game from there.');
+    const inp = $('#folderInput');
+    inp.value = '';
+    inp.onchange = () => {
+      Files.saveSnapshot = {};
+      for (const f of inp.files) if (SAVE_FILES.includes(f.name.toUpperCase()) && f.webkitRelativePath.split('/').length <= 2)
+        Files.saveSnapshot[f.name.toUpperCase()] = f;
+      backupSaves();
+    };
+    inp.click();
+    return;
+  }
+  const desc = prompt('Description for the backup (optional):', '') ?? null;
+  if (desc === null) return;
+  const entries = [];
+  for (const [n, f] of Object.entries(files)) entries.push([n, new Uint8Array(await f.arrayBuffer())]);
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+  download(zipStore(entries), `U5 save ${stamp}${desc ? ' ' + desc.replace(/[\\/:*?"<>|]/g, '') : ''}.zip`);
+  Files.saveSnapshot = null;
+  log('Saved game backed up');
+}
+
+// a minimal "stored" (uncompressed) zip writer
+function zipStore(entries) {
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = d => { let c = 0xFFFFFFFF; for (const b of d) c = crcTable[(c ^ b) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const parts = [], central = [];
+  let off = 0;
+  for (const [name, data] of entries) {
+    const nm = new TextEncoder().encode(name), c = crc(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint32(14, c, true);
+    h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, nm.length, true);
+    parts.push(new Uint8Array(h.buffer), nm, data);
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint32(16, c, true);
+    cd.setUint32(20, data.length, true); cd.setUint32(24, data.length, true); cd.setUint16(28, nm.length, true);
+    cd.setUint32(42, off, true);
+    central.push(new Uint8Array(cd.buffer), nm);
+    off += 30 + nm.length + data.length;
+  }
+  const size = central.reduce((a, p) => a + p.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+  end.setUint32(12, size, true); end.setUint32(16, off, true);
+  return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/zip' });
+}
+
+/* -------------------------------------------------------- log, help */
+
+const logLines = [];
+function log(text, raw) {
+  const t = new Date().toTimeString().slice(0, 8);
+  logLines.push(raw ? text : `${t}  ${text}`);
+  if (logLines.length > 500) logLines.shift();
+  const l = document.querySelector('#log');
+  if (l) { l.textContent = logLines.join('\n'); l.parentElement.scrollTop = 1e9; }
+}
+const LogWin = {
+  open() {
+    const d = Dlg.make('logwin', 'Debug log', 620);
+    const body = d.querySelector('.body');
+    body.style.height = '320px';
+    if (!body.querySelector('#log')) body.append(el('div', { id: 'log' }));
+    $('#log').textContent = logLines.join('\n');
+    body.scrollTop = 1e9;
+  },
+};
+const Help = {
+  open() {
+    const d = Dlg.make('help', 'Ultimapper 5', 560);
+    d.querySelector('.body').innerHTML = `
+      <p>A web version of Joonas Hirvonen's Ultimapper 5 for DOSBox Staging. It reads Ultima V's memory through
+      DOSBox Staging's HTTP API.</p>
+      <p><b>Map:</b> left click on the world map toggles the zoom view; right click opens the menu.
+      PgUp / PgDn change the size. In debug mode (Ctrl+D), Ctrl+click teleports.</p>
+      <p><b>HUD:</b> click a name to edit that character; click the clock area for the spell list,
+      right-click it for the inventory. In the spell list, Tab or right-click switches lists and a click or
+      Enter mixes one spell.</p>
+      <p><b>Keys:</b> S spells, I inventory, Q quickfight, Ctrl+E editor, Ctrl+T forward time, Ctrl+L log,
+      Ctrl+S backup, Esc closes a window.</p>`;
+  },
+};
+
+loop();
+</script>
+</body>
+</html>

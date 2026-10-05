@@ -1,7 +1,120 @@
 # Gold Box Companion, The All-Seeing Eye and Ultimapper 5 on DOSBox Staging
 
-Makes Joonas Hirvonen's companion tools work with DOSBox Staging 0.83 and
-later, through its HTTP API. Supported versions (checked by checksum):
+Joonas Hirvonen's companion tools for the Gold Box games, Eye of the Beholder
+1-3 and Ultima V, on DOSBox Staging 0.83 and later, through its HTTP API.
+Two ways:
+
+- **The companion pages** (`web/`): the tools rewritten as web pages, which
+  DOSBox Staging serves itself. They run in any browser, on any system Staging
+  runs on. `exo/patch_exo.py` switches an eXoDOS installation over to them.
+- **The patched tools**: the original Windows programs, patched to reach the
+  game through the API.
+
+## The companion pages
+
+`gbc.html` (Gold Box Companion 2.65), `ase.html` (The All-Seeing Eye 1.10 and
+ASE3 0.12: Eye of the Beholder 1-3) and `ultimapper5.html` (Ultimapper 5) do
+what the tools do, one page per tool, each in its own window: HUD, automap,
+editors, journals, quickfight and the rest. They read and write the game's
+memory through `/api/v1/memory`, so DOSBox Staging has to serve them: its API
+sends no CORS headers, so a page from anywhere else can't use it.
+
+Of the tools' files, the pages carry only small tables generated from them
+(memory offsets, ID patterns, record layouts, spell effect names; see
+`tools/gen_web_tables.py`). The data the tools ship (GBC's icons, area names
+and journals, ASE's map legend and clue book hints, ...) and the game's own
+files are loaded from folders you choose, and the browser keeps them.
+
+### Setting them up
+
+1. Put the three pages where DOSBox Staging serves files from. It looks in
+   two places:
+   - the `webserver` folder in Staging's settings folder (on Windows
+     `%LOCALAPPDATA%\DOSBox\webserver`; with a webserver running,
+     `http://localhost:8086/api/v1/dosbox/info` names it as
+     `configWebserver`). A portable Staging, one with a `dosbox-staging.conf`
+     next to `dosbox.exe`, uses the `webserver` folder next to `dosbox.exe`.
+   - then the first of these that exists: a `webserver` folder in the folder
+     Staging is started from, `resources\webserver` in that folder, and
+     `resources\webserver` next to `dosbox.exe` (where Staging's own
+     `index.html` is).
+2. Turn the webserver on, with `conf/gbc_staging.conf` added by `-conf` or
+   these lines in your config:
+
+   ```
+   [webserver]
+   webserver_enabled = on
+   webserver_port = 8086
+   ```
+
+3. Start the game and open `http://localhost:8086/gbc.html` (Gold Box games),
+   `ase.html` (Eye of the Beholder 1-3) or `ultimapper5.html` (Ultima V). The
+   page finds the game by itself.
+4. Once per browser, give the page the tools' data and the game, from its
+   menu:
+   - `gbc.html`: "GBC folder..." (Gold Box Companion's folder: icons, area
+     names, effects, journals) and "Game folder..." (saved games, backups,
+     PDFs).
+   - `ase.html`: "ASE / ASE3 data folder..." (ASE's folder for EOB 1 and 2,
+     ASE3's for EOB 3) and "Game folder..." (EOB 3's saved games).
+   - `ultimapper5.html`: the Ultima V game folder (maps and tiles).
+
+   Chromium-based browsers can also write saved games back into the game
+   folder; other browsers download them.
+
+Instead of choosing folders, the pages can take folders that the webserver
+serves (for instance links in its `webserver` folder) as URL parameters:
+`gbc.html?gbcdata=<GBC folder>&gamedata=<game folder>`,
+`ase.html?asedata=<ASE folder>&ase3data=<ASE3 folder>&gamedata=<game folder>`,
+`ultimapper5.html?data=<game folder>`. The eXoDOS patch uses these.
+
+### In eXoDOS: exo/patch_exo.py
+
+`exo/patch_exo.py` (Python 3.8 or later, nothing else) switches an eXoDOS
+installation on Windows to the pages. The GBC, ASE and Ultimapper options of
+the English launchers (16 games: the twelve Gold Box games, Eye of the
+Beholder 1-3 and Ultima V) then start the game in DOSBox Staging and open the
+page in the default browser, with the tools' data and the game folder already
+given.
+
+```
+python exo\patch_exo.py [--check | --revert] [--staging FOLDER] <eXo folder>
+```
+
+`<eXo folder>` is eXoDOS's `eXo` folder, the one with `eXoDOS`, `emulators`
+and `util` in it. `--staging` is the DOSBox Staging folder to use, relative to
+it (default `emulators\dosbox\staging0.83.0`: put DOSBox Staging 0.83.0 or
+later there, or name another folder). The patch:
+
+- switches the launchers (`eXoDOS\!dos\<game>\exception.bat`; the old one is
+  kept as `exception.bat.orig`): the tool's start becomes
+  `emulators\dosbox\gbc_staging_page.bat <page> <game folder>`, which waits
+  for Staging's webserver (with curl, part of Windows 10 and later) and opens
+  the page; the option's DOSBox becomes that Staging, with
+  `emulators\dosbox\gbc_staging.conf` (webserver on, port 8086; eXo's MT-32
+  ROMs, which the options' game configs name the DOSBox ECE way);
+- puts the pages into the Staging folder's `resources\webserver`, with two
+  links, `util` and `eXoDOS`, to the eXo folder's, through which the pages
+  get the tools' data and the game folders. They are relative symbolic links,
+  or junctions where Windows doesn't allow those (without Developer Mode).
+
+`--check` shows what would change and `--revert` undoes it. Run it again
+after updating the pages, or when an eXoDOS update has replaced launchers.
+
+### What was tested
+
+Each page side by side with the original tool, comparing windows, values and
+the memory each function writes (traced): GBC on Pool of Radiance, Curse of
+the Azure Bonds, Secret of the Silver Blades, Champions of Krynn, Countdown to
+Doomsday and Matrix Cubed (Pools of Darkness: found, HUD; other games' data
+checked); ASE on Eye of the Beholder 1-3; Ultimapper on Ultima V. The eXoDOS
+patch on copies of all 16 launchers (switch, again, other Staging folder,
+revert, junctions) and in an eXoDOS installation with Staging 0.84 (Curse of
+the Azure Bonds and Ultima V started from their launchers).
+
+## The patched tools
+
+Supported versions (checked by checksum):
 
 | Tool | Files |
 |---|---|
@@ -15,7 +128,7 @@ process is never opened and nothing depends on DOSBox internals, so later
 Staging versions keep working as long as that API does. The patched tools
 still work with vanilla DOSBox 0.74 and DOSBox ECE, unchanged.
 
-## Using it
+### Using them
 
 Everything needed is in the release zip (`patch.py`, `patches.json`,
 `dbxapi32.dll`, `gbc_staging.conf`), on the
@@ -90,7 +203,10 @@ remembers it.
 
 `dbxapi32.ini` next to `dbxapi32.dll` is optional. Its `[dbxapi]` section
 takes `port=` (use only this API port; by default it's found), `cache_ms=` (40)
-and `log=1` (writes `dbxapi32.log`).
+and `log=1` (writes `dbxapi32.log`). Built from the current source, it also
+takes `trace=1`: every read and write of the emulated RAM goes to
+`dbxapi32.trace`, which is how the pages' functions were matched to the tools'
+(not in the 0.1 release's DLL).
 
 ## Why the tools didn't work with Staging
 
@@ -147,7 +263,7 @@ and `log=1` (writes `dbxapi32.log`).
 All files keep their size; `patches.json` lists the changed bytes of each
 supported build, and `patch.py` checks the result's checksum before writing.
 
-## What was tested
+## What was tested with the patched tools
 
 With a local DOSBox Staging 0.84.0-alpha build (same API as the 0.83
 documentation) and the tools' original builds on DOSBox ECE r4230 as the
@@ -216,9 +332,18 @@ The release zip carries the sources in `source/`.
   on copies, writes `patches.json` and builds the release zip.
 - `tools/gen_def.py` writes the DLL's export list `src/dbxapi32.def` from the
   tools' imports.
+- The pages need no build: plain HTML with inline JavaScript, no libraries.
+  `tools/gen_web_tables.py --gbc <GBC 2.65 folder> --ultimapper
+  <Ultimapper_5.exe> --magic <MagicDefinitions.json>` regenerates the tables
+  built into them (between `/*@NAME@*/` lines): from GBC's `Game.dat` files
+  (patched by `patch.py`) and character file formats, Ultimapper's spell names,
+  and [Ultima5Redux](https://github.com/bradhannah/Ultima5Redux)'s
+  `DataFiles/MagicDefinitions.json`. `--check` only compares.
 
 ## License
 
 MIT, see `LICENSE`. Gold Box Companion, The All-Seeing Eye and Ultimapper 5
 are Joonas Hirvonen's; none of their files are included here, only the bytes
-`patch.py` changes.
+`patch.py` changes, and in the pages the small tables `tools/gen_web_tables.py`
+generates from them; the pages load everything else of the tools' (icons,
+maps, texts) from your copy at run time.

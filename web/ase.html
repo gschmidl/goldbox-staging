@@ -1,0 +1,2055 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The All-Seeing Eye</title>
+<style>
+:root {
+  --bg: #1b1610; --text: #e4e0d8; --dim: #7d7466; --menu: #1c1c1c; --sel: #2c4a78; --line: #2c2c2c;
+  --rock: #a28440; --floor: #ececec; --grid: #dadada; --wall: #5c4a38;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 13px/1.35 Tahoma, Verdana, "Segoe UI", system-ui, sans-serif; }
+#app { display: flex; flex-direction: column; height: 100vh; }
+#bar { display: flex; align-items: center; gap: 8px; padding: 3px 8px; background: #161616;
+  border-bottom: 1px solid var(--line); white-space: nowrap; min-height: 28px; }
+#title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.chip { padding: 0 8px; border-radius: 9px; background: #333; font-size: 12px; }
+.chip.ok { background: #0b4d0b; } .chip.bad { background: #6a1010; } .chip.warn { background: #6a5410; }
+button, select, input, textarea { background: #222; color: var(--text); border: 1px solid #484848; border-radius: 3px;
+  padding: 2px 8px; font: inherit; }
+button { cursor: pointer; } button:hover { background: #333; }
+input[type=number] { width: 70px; }
+#mapwrap { position: relative; flex: 1; overflow: auto; background: var(--rock); }
+#map { display: block; margin: 0 auto; }
+#tip { position: fixed; pointer-events: none; background: #483929; color: #fff; padding: 0 10px 10px;
+  font: 13px/1.4 Consolas, "Courier New", monospace; display: none; z-index: 30; width: 340px; white-space: pre-wrap; }
+#msg { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); max-width: 580px;
+  text-align: center; color: #2b2010; }
+#msg h2 { font-weight: normal; }
+.menu { position: fixed; background: var(--menu); border: 1px solid #555; min-width: 230px; padding: 3px 0;
+  z-index: 50; box-shadow: 3px 3px 10px #000c; user-select: none; }
+.menu .mi { padding: 3px 22px 3px 24px; position: relative; display: flex; justify-content: space-between;
+  gap: 24px; cursor: default; white-space: nowrap; }
+.menu .mi:hover, .menu .mi.open { background: var(--sel); }
+.menu .mi.dis { color: var(--dim); }
+.menu .mi.chk::before { content: "\2713"; position: absolute; left: 7px; }
+.menu .mi.sub::after { content: "\25B8"; position: absolute; right: 8px; }
+.menu .mi .k { color: #999; }
+.menu .sep { height: 1px; background: #444; margin: 3px 0; }
+.dlg { position: fixed; z-index: 40; background: #121212; border: 1px solid #555; box-shadow: 4px 4px 14px #000c;
+  display: flex; flex-direction: column; max-height: 92vh; }
+.dlg header { display: flex; align-items: center; gap: 8px; padding: 4px 8px; background: #1f1f1f; cursor: move;
+  user-select: none; border-bottom: 1px solid #333; }
+.dlg header .t { flex: 1; }
+.dlg .body { padding: 8px 10px; overflow: auto; }
+.list { border-collapse: collapse; width: 100%; font-size: 12px; }
+.list td, .list th { padding: 1px 6px; text-align: left; white-space: nowrap; }
+.list th { color: #aaa; font-weight: normal; border-bottom: 1px solid #333; position: sticky; top: 0; background: #121212; }
+.list tr.sel td { background: var(--sel); }
+.list tr:hover td { background: #1d2a3d; }
+.n { text-align: right !important; }
+#log { font: 12px/1.3 Consolas, monospace; white-space: pre-wrap; }
+.grid2 { display: grid; grid-template-columns: auto auto; gap: 4px 10px; align-items: center; }
+.ed { display: grid; grid-template-columns: 170px 1fr; gap: 12px; }
+.ed .chars button { display: block; width: 100%; text-align: left; margin-bottom: 3px; }
+.ed .chars button.sel { background: var(--sel); }
+.ed label { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 3px; }
+.cols { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.muted { color: #999; }
+.legend td { padding: 2px 8px; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <span id="title">The All-Seeing Eye</span>
+    <span id="peek" class="chip warn hidden">Peek</span>
+    <span id="dbg" class="chip warn hidden">Debug</span>
+    <span id="game" class="chip hidden"></span>
+    <span id="conn" class="chip">connecting</span>
+    <button id="menuBtn" title="Menu (or right-click the map)">&#9776;</button>
+  </div>
+  <div id="mapwrap">
+    <canvas id="map" width="512" height="512"></canvas>
+    <div id="msg"></div>
+  </div>
+</div>
+<div id="tip"></div>
+<input id="folderInput" type="file" webkitdirectory multiple class="hidden">
+
+<script>
+'use strict';
+/* The All-Seeing Eye for DOSBox Staging - a rewrite of Joonas Hirvonen's
+ * automapper for Eye of the Beholder 1 and 2 (ASE 1.10) and 3 (ASE3) as a web
+ * page. It reads and writes the game's memory through DOSBox Staging's HTTP
+ * API (/api/v1/memory), which also serves this page.
+ *
+ * Eye of the Beholder 1/2 keep in memory: the party (6 character records),
+ * the party's level/block/direction, the current level's 32x32 blocks (9
+ * bytes each: 4 wall faces N E S W, flags, first item, draw list), the item
+ * array (14 bytes per item), the level's 30 monsters, and the wall tables
+ * the game builds when it loads a level (wall flags, special wall types).
+ * The map is drawn from those like ScummVM's automap does. */
+
+const $ = (s, r = document) => r.querySelector(s);
+const el = (tag, props = {}, ...kids) => {
+  const e = Object.assign(document.createElement(tag), props);
+  for (const k of kids) e.append(k);
+  return e;
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const hex = (n, w = 4) => n.toString(16).toUpperCase().padStart(w, '0');
+const pad2 = n => String(n).padStart(2, '0');
+
+/* ---------------------------------------------------------------- API */
+
+const Api = {
+  async read(addr, len) {
+    const r = await fetch(`/api/v1/memory/${addr}/${len}`,
+      { headers: { Accept: 'application/octet-stream' }, cache: 'no-store' });
+    if (!r.ok) throw new Error(`read ${hex(addr, 6)}: HTTP ${r.status}`);
+    return new Uint8Array(await r.arrayBuffer());
+  },
+  async write(addr, bytes) {
+    const r = await fetch(`/api/v1/memory/${addr}`, { method: 'PUT',
+      headers: { 'Content-Type': 'application/octet-stream' }, body: bytes });
+    if (!r.ok) throw new Error(`write ${hex(addr, 6)}: HTTP ${r.status}`);
+  },
+  async info() {
+    const r = await fetch('/api/v1/dosbox/info', { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  },
+};
+
+/* ------------------------------------------------- browser storage */
+
+const DB = {
+  db: null,
+  open() {
+    return this.db ??= new Promise((res, rej) => {
+      const q = indexedDB.open('ase', 1);
+      q.onupgradeneeded = () => { q.result.createObjectStore('files'); q.result.createObjectStore('kv'); };
+      q.onsuccess = () => res(q.result);
+      q.onerror = () => rej(q.error);
+    });
+  },
+  async op(store, mode, fn) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const q = fn(db.transaction(store, mode).objectStore(store));
+      q.onsuccess = () => res(q.result);
+      q.onerror = () => rej(q.error);
+    });
+  },
+  get: (s, k) => DB.op(s, 'readonly', o => o.get(k)),
+  put: (s, k, v) => DB.op(s, 'readwrite', o => o.put(v, k)),
+  del: (s, k) => DB.op(s, 'readwrite', o => o.delete(k)),
+  keys: s => DB.op(s, 'readonly', o => o.getAllKeys()),
+};
+
+const Settings = {
+  v: { buttons: true, illusionary: false, monsters: false, items: false, hints: false, notes: false,
+       debug: false, zoom: 0, slot: 1 },
+  load() { try { Object.assign(this.v, JSON.parse(localStorage.getItem('ase.settings') || '{}')); } catch {} },
+  save() { try { localStorage.setItem('ase.settings', JSON.stringify(this.v)); } catch {} },
+};
+
+/* ------------------------------------------------------ game data */
+
+const LEVEL_NAMES = {
+  1: ['Upper sewer level', 'Middle sewer level', 'Lower sewer level', 'Upper level of dwarven ruins',
+    'Dwarven ruins and camp', 'Bottom level of dwarven ruins', 'Upper reaches of the drow', 'Drow outcasts',
+    'Lower reaches of the drow', "Xanathar's outer sanctum, mantis hive", "Xanathar's outer sanctum, lower reaches",
+    "Xanathar's inner sanctum"],
+  2: ['Catacomb, level 1', 'Catacomb, level 2', 'Catacomb, level 3', 'Forest', 'Temple, entrance hall',
+    'Temple, level 2', 'Silver tower, level 1', 'Silver tower, level 2', 'Silver tower, level 3', 'Azure tower, level 1',
+    'Azure tower, level 2', 'Azure tower, level 3', 'Azure tower, level 4', 'Frost giant prison',
+    'Crimson tower, level 1', 'Crimson tower, level 2'],
+  3: ["Warrior's tomb 1", "Warrior's tomb 2", 'Burial glen', 'Forest trail', 'Guildhall quarter ruins',
+    "Mages' guild 1", "Mages' guild 2", "Mages' guild 3", "Mages' guild 4", 'Temple quarter ruins',
+    'Temple of Lathander 1', 'Temple of Lathander 2', 'Temple of Lathander 3', 'Temple of Lathander 4'],
+};
+const MONSTER_NAMES = {
+  1: ['Kobold', 'Leech', 'Skeleton', 'Zombie', 'Kuo-Toa', 'Flind', 'Spider', 'Dwarf', 'Skeletal lord',
+    'Displacer beast', 'Mantis warrior', 'Drow', 'Golem', 'Wizard', 'Drider', 'Kenku', 'Mind flayer',
+    'Rust monster', 'Xorn', 'Hell hound', 'Xanathar', 'Wolf'],
+  2: [],
+};
+const RACES = ['Human', 'Elf', 'Half-elf', 'Dwarf', 'Gnome', 'Halfling'];
+const CLASSES = ['Fighter', 'Ranger', 'Paladin', 'Mage', 'Cleric', 'Thief', 'Fighter/Cleric', 'Fighter/Thief',
+  'Fighter/Mage', 'Fighter/Mage/Thief', 'Thief/Mage', 'Cleric/Thief', 'Fighter/Cleric/Mage', 'Ranger/Cleric',
+  'Cleric/Mage'];
+const ALIGN = ['Lawful good', 'Neutral good', 'Chaotic good', 'Lawful neutral', 'True neutral', 'Chaotic neutral',
+  'Lawful evil', 'Neutral evil', 'Chaotic evil'];
+const DIRS = ['north', 'east', 'south', 'west'];
+
+// per game: record sizes, the wall-flag preset that begins the game's flag
+// table, the special block wall ids (as in ScummVM's automap), and where the
+// structures lie relative to the first character record
+const GAMES = {
+  1: { name: 'EOB 1', levels: 12, charSize: 243, items: 500, monSize: 28, cellSize: 9, cellItem: 5,
+       coordsLen: 5, coordBlock: 2, coordDir: 4,
+       flagPreset: [0x07, 0x00, 0x40, 0xA8, 0x88, 0x88, 0x88, 0x9F, 0xA8, 0x88, 0x88, 0x88, 0x9F, 0xAA, 0x8A, 0x8A, 0x8A, 0x9F],
+       tableLen: 70, teleporter: [52], illusion: [67, 64, 66, 57], plate: [28], pit: [27], up: [23], down: [24],
+       wallOfForce: -1, firstItemName: 'Leather armor', firstItemIndex: 2, itemNameLen: 35, itemTypes: 57, slots: 1,
+       // character record fields (EOB 1 keeps HP in single bytes)
+       f: { hp: 0x1B, hpMax: 0x1C, hpSize: 1, ac: 0x1D, race: 0x1F, cls: 0x20, align: 0x21, food: 0x23, level: 0x24,
+            xp: 0x27, mage: 0x37, cleric: 0x55, spellLevels: 5, spellSlots: 6, inv: 0x77 },
+       rel: { coords: 0x648, map: -0x3CEC, items: -0x67B0, monsters: -0x6AFE, itemTypes: -0x4B90 } },
+  2: { name: 'EOB 2', levels: 16, charSize: 345, items: 600, monSize: 30, cellSize: 10, cellItem: 6,
+       coordsLen: 7, coordBlock: 4, coordDir: 6,
+       flagPreset: [0x07, 0x00, 0x40, 0xA8, 0x88, 0x88, 0x88, 0x9F, 0xA8, 0x88, 0x88, 0x88, 0x9F, 0xA8, 0x88, 0x88, 0x88, 0x9F],
+       tableLen: 80, teleporter: [44], illusion: [46], plate: [35, 36], pit: [38], up: [23], down: [24],
+       wallOfForce: 74, firstItemName: 'Leather armor', firstItemIndex: 2, itemNameLen: 35, itemTypes: 64,
+       f: { hp: 0x1B, hpMax: 0x1D, hpSize: 2, ac: 0x1F, race: 0x21, cls: 0x22, align: 0x23, food: 0x25, level: 0x26,
+            xp: 0x29, mage: 0x39, cleric: 0x89, spellLevels: 8, spellSlots: 10, inv: 0xDD },
+       rel: { coords: -0x783A, map: -0x42A8, items: -0x743E, monsters: -0x77DE, itemTypes: -0x519A } },
+  // EOB 3 runs on the AESOP engine, which puts its arrays wherever its heap has
+  // room: the level map (32x32 bytes, FF open, walls 0 or 1 in a checkerboard)
+  // and the party's x, y, direction and level are found by their structure
+  3: { name: 'EOB 3', levels: 14, slots: 12 },
+};
+// AESOP.EXE's own message, in conventional memory while EOB 3 runs
+const EOB3_SIGN = new TextEncoder().encode('Eye of the Beholder III requires');
+
+/* -------------------------------------------------------- the game */
+
+const Game = {
+  id: 0, cfg: null, char0: 0, tables: null, info: null,
+  chars: null, coords: null, map: null, items: null, monsters: null, names: [],
+  mapAddr: 0, locAddr: 0,   // EOB 3
+  get level() { return this.id === 3 ? this.coords[3] : this.coords[0] | this.coords[1] << 8; },
+  get block() {
+    if (this.id === 3) return this.coords[1] << 5 | this.coords[0];
+    const o = this.cfg.coordBlock; return this.coords[o] | this.coords[o + 1] << 8;
+  },
+  get dir() { return this.coords[this.id === 3 ? 2 : this.cfg.coordDir] & 3; },
+  get x() { return this.block & 31; },
+  get y() { return this.block >> 5; },
+  addr(key) { return this.char0 + this.cfg.rel[key]; },
+
+  async find() {
+    const mem = new Uint8Array(0x100000);
+    for (let a = 0; a < mem.length; a += 0x10000) mem.set(await Api.read(a, 0x10000), a);
+    for (const id of [1, 2]) {
+      const cfg = GAMES[id];
+      const t = findTables(mem, cfg);
+      if (!t) continue;
+      const c0 = findCharacters(mem, cfg);
+      if (c0 < 0) continue;
+      Object.assign(this, { id, cfg, char0: c0, tables: t, types: null, tweaked: false });
+      this.names = itemNames(mem, cfg);
+      return true;
+    }
+    if (indexOf(mem, EOB3_SIGN) >= 0) return this.find3();
+    return false;
+  },
+  // EOB 3: read all of the emulated RAM, find the party location (after the
+  // list of party members) and the level map that goes with it
+  async find3(keepLocation = false) {
+    setConn('searching EOB 3', 'warn');
+    const mem = await readAll(), maps = findMaps3(mem);
+    if (!maps.length) { this.searchNote = 'EOB 3 runs, but no level map is in memory yet.'; return false; }
+    let locs = keepLocation ? [this.locAddr] : findLocations3(mem, true).filter(l => maps.some(m => fits3(mem, m, l)));
+    if (!locs.length) {
+      // ASE3's way: the location in the newest saved game, exactly
+      const saved = await Saves3.newestLocation();
+      if (saved) {
+        for (let i = indexOf(mem, saved); i >= 0; i = indexOf(mem, saved, i + 1))
+          if (maps.some(m => fits3(mem, m, i))) locs.push(i);
+        log(`Party location of the newest saved game (${[...saved].map(v => hex(v, 2)).join(' ')}): ${locs.length} matches`);
+      }
+    }
+    if (!locs.length || locs.length > 40) {
+      this.searchNote = locs.length ? 'Too many possible party locations. Move the party and choose "Search again" in the menu.'
+        : 'EOB 3 runs, but the party location was not found. Choose the game folder (menu) so the location in the newest ' +
+          'saved game can be searched for, load that game and choose "Search again".';
+      this.hold = true;
+      return false;
+    }
+    let loc = locs[0];
+    if (locs.length > 1) {
+      log(`${locs.length} possible party locations: ${locs.map(l => hex(l, 6)).join(' ')}`);
+      loc = await LocationChooser.choose(locs);
+      if (loc < 0) { this.searchNote = 'Search cancelled. Choose "Search again" in the menu to retry.'; this.hold = true; return false; }
+    }
+    const level = mem[loc + 3], map = await bestMap3(mem, maps, loc, level);
+    if (map < 0) { this.searchNote = `No level map in memory fits the party on level ${level}.`; return false; }
+    Object.assign(this, { id: 3, cfg: GAMES[3], locAddr: loc, mapAddr: map, searchNote: '' });
+    log(`EOB 3: party location at ${hex(loc, 6)} (${mem[loc]},${mem[loc + 1]} facing ${DIRS[mem[loc + 2]]}, level ${level}), ` +
+      `level map at ${hex(map, 6)}${maps.length > 1 ? ` (${maps.length} maps in memory: ${maps.map(m => hex(m, 6)).join(' ')})` : ''}`);
+    return true;
+  },
+  async poll3() {
+    const [map, loc] = await Promise.all([Api.read(this.mapAddr, 1024), Api.read(this.locAddr, 4)]);
+    Object.assign(this, { map, coords: loc });
+  },
+  // the location still makes sense and the map is a map with the party on open floor
+  valid3() {
+    const c = this.coords;
+    return c[0] < 32 && c[1] < 32 && c[2] < 4 && c[3] >= 1 && c[3] <= 14 && isMap3(this.map, 0) && this.map[this.block] === 0xFF;
+  },
+  async poll() {
+    if (this.id === 3) return this.poll3();
+    const cfg = this.cfg;
+    const [chars, coords, map, items, monsters, tables] = await Promise.all([
+      Api.read(this.char0, cfg.charSize * 6), Api.read(this.addr('coords'), cfg.coordsLen),
+      Api.read(this.addr('map'), 1024 * cfg.cellSize), Api.read(this.addr('items'), cfg.items * 14),
+      Api.read(this.addr('monsters'), 30 * cfg.monSize), Api.read(this.tables.shape, cfg.tableLen * 3)]);
+    Object.assign(this, { chars, coords, map, items, monsters });
+    this.tables.data = tables;
+    if (!this.types) this.types = await Api.read(this.addr('itemTypes'), (cfg.itemTypes || 57) * 16);
+  },
+  party() {
+    const list = [];
+    for (let i = 0; i < 6; i++) {
+      const o = i * this.cfg.charSize, r = this.chars.subarray(o, o + this.cfg.charSize);
+      if (!(r[1] & 1)) continue;
+      let name = '';
+      for (let k = 2; k < 13 && r[k]; k++) name += String.fromCharCode(r[k]);
+      list.push({ slot: i, off: o, name, r });
+    }
+    return list;
+  },
+  wallFlags(w) { return this.tables.data[2 * this.cfg.tableLen + w] ?? 0; },
+  specialType(w) { return this.tables.data[this.cfg.tableLen + w] ?? 0; },
+  shapeMap(w) { const v = this.tables.data[w]; return v > 127 ? v - 256 : v ?? 0; },
+  cell(b) { const s = this.cfg.cellSize; return this.map.subarray(b * s, b * s + s); },
+  cellItem(b) { const c = this.cell(b), o = this.cfg.cellItem; return c[o] | c[o + 1] << 8; },
+  item(i) {
+    const o = i * 14, e = this.items;
+    return { index: i, nameUnid: e[o], nameId: e[o + 1], flags: e[o + 2], icon: e[o + 3], type: e[o + 4], pos: e[o + 5],
+      block: e[o + 6] | e[o + 7] << 8, next: e[o + 8] | e[o + 9] << 8, prev: e[o + 10] | e[o + 11] << 8,
+      level: e[o + 12], value: e[o + 13] > 127 ? e[o + 13] - 256 : e[o + 13] };
+  },
+  // as the original names them: item 0 "-", unused ones nothing, weapons, armour and
+  // protection rings (item type's extraProperties & 7F below 4) with their plusses
+  itemName(it) {
+    if (it.index === 0) return '-';
+    if (!it.nameUnid && !it.nameId) return '';
+    const id = it.flags & 0x40 && it.nameId > 1 ? it.nameId : it.nameUnid;
+    let name = this.names[id] || `item ${it.index}`;
+    const t = this.types;
+    if (it.value && t && it.type * 16 + 14 < t.length && (t[it.type * 16 + 14] & 0x7F) < 4)
+      name += (it.value > 0 ? ' +' : ' ') + it.value;
+    return name;
+  },
+  monster(i) {
+    const s = this.cfg.monSize, o = i * s, m = this.monsters;
+    return { index: i, type: m[o], unit: m[o + 1], block: m[o + 2] | m[o + 3] << 8, pos: m[o + 4], dir: m[o + 5],
+      mode: m[o + 8], hpMax: m[o + 12] | m[o + 13] << 8, hpCur: m[o + 14] | m[o + 15] << 8, flags: m[o + 22] };
+  },
+};
+
+function indexOf(mem, bytes, from = 0) {
+  outer: for (let i = mem.indexOf(bytes[0], from); i >= 0 && i <= mem.length - bytes.length; i = mem.indexOf(bytes[0], i + 1)) {
+    for (let k = 1; k < bytes.length; k++) if (mem[i + k] !== bytes[k]) continue outer;
+    return i;
+  }
+  return -1;
+}
+
+// the game's wall tables: shape map, special types and flags, tableLen entries each
+function findTables(mem, cfg) {
+  const f = indexOf(mem, cfg.flagPreset);
+  if (f < 0) return null;
+  const shape = f - 2 * cfg.tableLen, st = f - cfg.tableLen;
+  if (mem[st + 3] !== 1 || mem[st + 8] !== 6 || mem[st + 13] !== 1) return null;
+  return { shape, special: st, flags: f, data: mem.slice(shape, shape + 3 * cfg.tableLen) };
+}
+
+function charOk(mem, o, f) {
+  if (!(mem[o + 1] & 1)) return false;
+  let n = 0;
+  for (; n < 11 && mem[o + 2 + n]; n++) { const c = mem[o + 2 + n]; if (c < 32 || c > 126) return false; }
+  if (n < 1 || n > 10) return false;
+  for (const i of [0x0D, 0x0E, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A])
+    if (mem[o + i] < 3 || mem[o + i] > 25) return false;
+  return mem[o + f.hpMax] + (f.hpSize > 1 ? mem[o + f.hpMax + 1] : 0) > 0 && mem[o + f.race] < 12 && mem[o + f.cls] < 15 &&
+    mem[o + f.align] < 9 && mem[o + f.food] <= 100 && mem[o + f.level] >= 1 && mem[o + f.level] <= 30;
+}
+// the first character record whose coordinates (at a fixed distance) make sense
+function findCharacters(mem, cfg) {
+  for (let o = cfg.charSize; o < mem.length - cfg.charSize * 6; o++) {
+    if (!charOk(mem, o, cfg.f) || charOk(mem, o - cfg.charSize, cfg.f)) continue;
+    const c = o + cfg.rel.coords;
+    if (c < 0 || c + cfg.coordsLen > mem.length) continue;
+    const level = mem[c] | mem[c + 1] << 8, block = mem[c + cfg.coordBlock] | mem[c + cfg.coordBlock + 1] << 8;
+    if (level >= 1 && level <= cfg.levels && block < 1024 && mem[c + cfg.coordDir] < 4) return o;
+  }
+  return -1;
+}
+function itemNames(mem, cfg) {
+  const first = indexOf(mem, new TextEncoder().encode(cfg.firstItemName + '\0'));
+  if (first < 0) return [];
+  const base = first - cfg.firstItemIndex * cfg.itemNameLen, out = [];
+  for (let i = 0; i < 256; i++) {
+    const o = base + i * cfg.itemNameLen;
+    let s = '';
+    for (let k = 0; k < cfg.itemNameLen && mem[o + k]; k++) s += String.fromCharCode(mem[o + k]);
+    out.push(s);
+  }
+  return out;
+}
+
+// all of the emulated RAM (EOB 3 runs in protected mode and uses all of it)
+async function memSize() {
+  if (Api.size) return Api.size;
+  let lo = 1, hi = 4096;   // MB that can be read / can't
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    try { await Api.read(mid * 0x100000 - 1, 1); lo = mid; } catch { hi = mid; }
+  }
+  return Api.size = lo * 0x100000;
+}
+async function readAll() {
+  const size = await memSize(), mem = new Uint8Array(size), step = 0x100000, starts = [];
+  for (let a = 0; a < size; a += step) starts.push(a);
+  for (let i = 0; i < starts.length; i += 4)
+    await Promise.all(starts.slice(i, i + 4).map(async a => mem.set(await Api.read(a, Math.min(step, size - a)), a)));
+  return mem;
+}
+
+// EOB 3's level map: 32x32 bytes, FF open, every wall cell (x + y) & 1; the
+// top row is the level's border, so (nearly) all wall
+function isMap3(mem, a) {
+  let walls = 0;
+  for (let k = 0; k < 1024; k++) {
+    const v = mem[a + k];
+    if (v === 0xFF) continue;
+    if (v !== ((k & 31) + (k >> 5) & 1)) return false;
+    walls++;
+    if (k === 31 && walls < 24) return false;
+  }
+  return walls >= 100 && walls <= 900;
+}
+function findMaps3(mem) {
+  const out = [];
+  let walls = 0;   // non-FF bytes among the 32 from a on
+  for (let k = 0; k < 32; k++) if (mem[k] !== 0xFF) walls++;
+  for (let a = 0, end = mem.length - 1024; a <= end; a++) {
+    if (a) { if (mem[a - 1] !== 0xFF) walls--; if (mem[a + 31] !== 0xFF) walls++; }
+    if (walls < 24 || mem[a] !== 0 && mem[a] !== 0xFF) continue;
+    if (isMap3(mem, a)) out.push(a);
+  }
+  return out;
+}
+// the party location: x, y, direction (0 north), level; it follows the party's
+// member objects (7 slots: the used ones first, at least the last one FFFF)
+function partyBefore3(mem, i) {
+  let n = 0;
+  for (let k = 0; k < 7; k++) {
+    const v = mem[i - 14 + 2 * k] | mem[i - 13 + 2 * k] << 8;
+    if (v === 0xFFFF) continue;
+    if (n !== k || k === 6 || v === 0 || v >= 0x400) return false;
+    for (let j = 0; j < k; j++) if ((mem[i - 14 + 2 * j] | mem[i - 13 + 2 * j] << 8) === v) return false;
+    n++;
+  }
+  return n > 0;
+}
+function findLocations3(mem, strict) {
+  const out = [];
+  for (let i = 14, end = mem.length - 4; i <= end; i++) {
+    const lv = mem[i + 3];
+    if (lv < 1 || lv > 14 || mem[i] > 31 || mem[i + 1] > 31 || mem[i + 2] > 3) continue;
+    if (!strict || partyBefore3(mem, i)) out.push(i);
+  }
+  return out;
+}
+const fits3 = (mem, m, l) => mem[m + (mem[l + 1] << 5 | mem[l])] === 0xFF;
+// the map for the party: open floor under the party, closest to ASE3's map of
+// that level (when its Maps folder has been imported), an AESOP heap block
+// (8-byte header starting with 4 zero bytes) before other copies
+async function bestMap3(mem, maps, loc, level) {
+  const ref = await Maps3.get(level), cands = maps.filter(m => fits3(mem, m, loc));
+  let best = -1, bs = -1;
+  for (const m of cands) {
+    let s = 0;
+    if (ref) for (let k = 0; k < 1024; k++) if (mem[m + k] === ref[k]) s++;
+    s = s * 8 + (m >= 8 && !mem[m - 8] && !mem[m - 7] && !mem[m - 6] && !mem[m - 5] ? 4 : 0);
+    if (s > bs) { best = m; bs = s; }
+  }
+  return best;
+}
+// ASE3's own level maps (Maps\NN.dat), only used to pick among copies
+const Maps3 = {
+  cache: {},
+  async get(level) {
+    if (!(level in this.cache)) {
+      const b = await DB.get('files', `ASE3:Maps/${pad2(level)}.dat`);
+      this.cache[level] = b ? new Uint8Array(b) : null;
+    }
+    return this.cache[level];
+  },
+};
+
+/* ------------------------------------------------- explored, notes */
+
+const Store = {
+  explored: {}, notes: {}, dirty: new Set(), gen: 0,
+  key(level, slot = Game.cfg?.slots === 1 ? 1 : Settings.v.slot) { return `${Game.id}:${slot}:${level}`; },
+  exp(level) {
+    const k = this.key(level);
+    if (!this.explored[k]) {
+      const m = this.explored[k] = new Uint8Array(1024);
+      DB.get('kv', 'exp:' + k).then(b => { if (b) { const o = new Uint8Array(b); for (let i = 0; i < 1024; i++) m[i] |= o[i]; this.gen++; Render.draw(); } });
+    }
+    return this.explored[k];
+  },
+  mark(level, b) { const m = this.exp(level); if (!m[b]) { m[b] = 1; this.dirty.add(this.key(level)); this.gen++; } },
+  fill(level, v) { this.exp(level).fill(v); this.dirty.add(this.key(level)); this.gen++; Render.draw(); },
+  async copyFrom(slot) {
+    for (let lv = 1; lv <= Game.cfg.levels; lv++) {
+      const b = await DB.get('kv', 'exp:' + this.key(lv, slot));
+      if (!b) continue;
+      const m = this.exp(lv), o = new Uint8Array(b);
+      for (let i = 0; i < 1024; i++) m[i] |= o[i];
+      this.dirty.add(this.key(lv));
+    }
+    this.gen++; Render.draw();
+  },
+  async notesOf(level) {
+    const k = this.key(level);
+    if (!this.notes[k]) this.notes[k] = (await DB.get('kv', 'notes:' + k)) || {};
+    return this.notes[k];
+  },
+  async setNote(level, b, text) {
+    const n = await this.notesOf(level);
+    if (text) n[b] = text; else delete n[b];
+    await DB.put('kv', 'notes:' + this.key(level), n);
+    this.gen++; Render.draw();
+  },
+  flush() {
+    for (const k of this.dirty) DB.put('kv', 'exp:' + k, this.explored[k].buffer.slice(0));
+    this.dirty.clear();
+  },
+};
+setInterval(() => Store.flush(), 3000);
+
+/* ------------------------------------------------------ map logic
+ * Every wall face gets one of ASE's categories: from ASE's Blocks.dat (wall
+ * index x level -> category) when the ASE folder has been chosen, otherwise
+ * from the wall tables the game builds for the level. */
+
+const CAT = { floor: 1, wall: 2, buttonDoor: 3, buttonDoorOpen: 4, door: 5, doorOpen: 6, plate: 7, button: 8,
+  rubble: 9, niche: 10, up: 11, down: 12, switch: 14, cornerFix: 15, keyhole: 16, illusion: 17, hole: 18,
+  teleporter: 19, portal: 20, eyeNiche: 21, chain: 22, mount: 23, jewelBox: 24, pedestal: 28, lightOff: 29,
+  lightOn: 30, wallOfForce: 31, bashable: 32 };
+const CAT_NAMES = [, 'floor', 'wall', 'closed door with an opening button', 'opened door with a closing button',
+  'closed door without an opening button', 'opened door without a closing button', 'pressure plate', 'button',
+  'rubble', 'wall niche', 'upstairs', 'downstairs', 'party location', 'switch', 'wall corner fix', 'keyhole',
+  'illusionary wall', 'hole in the floor', 'teleporter', 'stone portal', 'eye slot', 'chain', 'mounting device',
+  'jewel box', 'debug marker', 'monster', 'item', 'pedestal', 'light pad, off', 'light pad, on', 'wall of force',
+  'bashable wall'];
+const CENTER_CATS = new Set([CAT.buttonDoor, CAT.buttonDoorOpen, CAT.door, CAT.doorOpen, CAT.plate, CAT.up, CAT.down,
+  CAT.hole, CAT.teleporter, CAT.pedestal, CAT.lightOff, CAT.lightOn, CAT.wallOfForce, CAT.bashable]);
+
+const Blocks = {
+  data: {},   // game id -> Uint8Array (101 wall indexes x levels)
+  async load() {
+    for (const id of [1, 2]) {
+      const b = await DB.get('files', `ASE:EOB${id}/Blocks.dat`);
+      if (b) this.data[id] = new Uint8Array(b);
+    }
+  },
+};
+
+const step = (b, d) => d === 0 ? (b - 32) & 1023 : d === 1 ? (b & ~31) | ((b + 1) & 31) : d === 2 ? (b + 32) & 1023 : (b & ~31) | ((b - 1) & 31);
+const face = (b, d) => Game.cell(b)[d];
+// the face you see on side d of block b is the neighbour's wall facing back
+const wallAt = (b, d) => face(step(b, d), d ^ 2);
+const passable = w => (Game.wallFlags(w) & 9) !== 0;
+const isDoor = w => (Game.wallFlags(w) & 8) !== 0;
+
+function category(w) {
+  const bl = Blocks.data[Game.id], cfg = Game.cfg;
+  if (bl && w < 101) { const c = bl[w * cfg.levels + Game.level - 1]; if (c) return c; }
+  const fl = Game.wallFlags(w), st = Game.specialType(w);
+  if (fl & 8) return st === 1 ? (fl & 1 ? CAT.buttonDoorOpen : CAT.buttonDoor) : (fl & 1 ? CAT.doorOpen : CAT.door);
+  if (cfg.up.includes(w)) return CAT.up;
+  if (cfg.down.includes(w)) return CAT.down;
+  if (cfg.plate.includes(w)) return CAT.plate;
+  if (cfg.pit.includes(w)) return CAT.hole;
+  if (cfg.teleporter.includes(w)) return CAT.teleporter;
+  if (cfg.illusion.includes(w)) return CAT.illusion;
+  if (w === cfg.wallOfForce) return CAT.wallOfForce;
+  if (st === 10) return CAT.niche;
+  if (st === 20) return CAT.portal;
+  if (st >= 3 && st <= 4) return CAT.switch;
+  if (st === 2 && Game.shapeMap(w) > 0) return CAT.button;
+  return fl & 1 ? CAT.floor : CAT.wall;
+}
+
+const isSolidBlock = b => [0, 1, 2, 3].every(d => { const w = face(b, d); return w !== 0 && !passable(w); });
+
+function blockFeatures(b) {
+  const f = { solid: isSolidBlock(b), walls: [], center: 0, sides: [], rubble: false };
+  const c = Game.cell(b);
+  if (f.solid) {
+    f.rubble = [0, 1, 2, 3].some(d => category(c[d]) === CAT.rubble);
+    return f;
+  }
+  for (let d = 0; d < 4; d++) {
+    const w = wallAt(b, d), cat = category(w);
+    f.walls[d] = !passable(w) && cat !== CAT.illusion && w !== Game.cfg.wallOfForce;
+    if (!passable(w) && !CENTER_CATS.has(cat) && cat !== CAT.wall && cat !== CAT.floor) f.sides.push({ d, cat });
+    if (cat === CAT.illusion) f.sides.push({ d, cat });
+  }
+  // what the block itself holds: doors, stairs, plates, holes, teleporters...
+  let best = 0;
+  for (let d = 0; d < 4; d++) {
+    const cat = category(c[d]);
+    if (CENTER_CATS.has(cat)) best = best && (best === CAT.up || best === CAT.down) ? best : cat;
+  }
+  f.center = best;
+  f.doorNS = isDoor(c[0]) || isDoor(c[2]);
+  // a block that looks like a wall from every side but can be walked through
+  f.illusionBlock = [0, 1, 2, 3].every(d => category(c[d]) === CAT.illusion);
+  return f;
+}
+
+function partyExplore() {
+  const lv = Game.level, b = Game.block;
+  if (Game.id === 3) {   // ASE3: the party's cell and the four next to it
+    for (const [dx, dy] of [[0, 0], [0, -1], [1, 0], [0, 1], [-1, 0]]) {
+      const x = Game.x + dx, y = Game.y + dy;
+      if (x >= 0 && y >= 0 && x < 32 && y < 32) Store.mark(lv, y << 5 | x);
+    }
+    return;
+  }
+  Store.mark(lv, b);
+  for (let d = 0; d < 4; d++) {
+    const w = wallAt(b, d);
+    if (passable(w) || isDoor(w)) Store.mark(lv, step(b, d));
+  }
+  // what the party sees ahead (up to 3 blocks, like the 3D view)
+  let cur = b;
+  for (let i = 0; i < 3; i++) {
+    const w = wallAt(cur, Game.dir);
+    if (!passable(w) && !isDoor(w)) break;
+    cur = step(cur, Game.dir);
+    Store.mark(lv, cur);
+    for (const side of [(Game.dir + 1) & 3, (Game.dir + 3) & 3])
+      if (passable(wallAt(cur, side))) Store.mark(lv, step(cur, side));
+    if (isDoor(wallAt(cur, Game.dir)) && !(Game.wallFlags(wallAt(cur, Game.dir)) & 1)) break;
+  }
+}
+
+/* ---------------------------------------------------------- hints */
+
+const Hints = {
+  cache: {},
+  async get(level) {
+    const k = `${Game.id}:${level}`;
+    if (this.cache[k] !== undefined) return this.cache[k];
+    const f = await DB.get('files', `ASE:EOB${Game.id}/Hints_${pad2(level)}.txt`);
+    const list = [];
+    if (f) {
+      const text = new TextDecoder('latin1').decode(f);
+      for (const part of text.split(/\r?\n(?=#\d)/)) {
+        const m = part.match(/^#(\d+),(\d+)\s*\r?\n(\S*)\s*\r?\n([\s\S]*)$/);
+        if (m) list.push({ x: +m[1] - 1, y: +m[2] - 1, id: m[3], text: m[4].trim() });   // the files count from 1
+      }
+    }
+    return this.cache[k] = list;
+  },
+};
+
+/* ------------------------------------------------------------ map */
+
+const COLORS = { rock: '#a28440', floor: '#ececec', grid: '#d6d6d6', wall: '#5c4a38', door: '#8d8d8d',
+  button: '#11a011', object: '#2f7fd0', niche: '#8a7a60', stairs: '#8a8a8a', item: '#d08a10', monster: '#c02020',
+  party: '#1d8a1d', hint: '#00ff00', note: '#1060d0', pit: '#3a3020', plate: '#8d8d8d', teleporter: '#7040c0',
+  illusion: '#c06020', rubble: '#6e5d4d' };
+
+const Render = {
+  canvas: $('#map'), mouse: null, peekUntil: 0, hintList: [], notes: {},
+  cellSize() {
+    const wrap = $('#mapwrap'), z = Settings.v.zoom;
+    if (z > 0) return z;
+    return Math.max(8, Math.floor(Math.min(wrap.clientWidth, wrap.clientHeight) / 32));
+  },
+  async refreshAux() {
+    if (!Game.coords) return;
+    this.hintList = await Hints.get(Game.level);
+    this.notes = await Store.notesOf(Game.level);
+  },
+  draw() {
+    if (!Game.map || !Game.coords) return;
+    if (Game.id === 3) return this.draw3();
+    const cs = this.cellSize(), c = this.canvas, g = c.getContext('2d'), size = cs * 32;
+    if (c.width !== size) { c.width = size; c.height = size; }
+    g.fillStyle = COLORS.rock; g.fillRect(0, 0, size, size);
+    const lv = Game.level, exp = Store.exp(lv), all = Date.now() < this.peekUntil;
+    $('#peek').classList.toggle('hidden', !all);
+    const wt = Math.max(2, Math.round(cs / 8));
+    const shown = b => all || exp[b];
+    // floors
+    for (let b = 0; b < 1024; b++) {
+      if (!shown(b) || isSolidBlock(b)) continue;
+      const X = (b & 31) * cs, Y = (b >> 5) * cs;
+      g.fillStyle = COLORS.floor; g.fillRect(X, Y, cs, cs);
+      g.strokeStyle = COLORS.grid; g.lineWidth = 1; g.strokeRect(X + 0.5, Y + 0.5, cs - 1, cs - 1);
+    }
+    // walls, doors, objects
+    for (let b = 0; b < 1024; b++) {
+      if (!shown(b)) continue;
+      const X = (b & 31) * cs, Y = (b >> 5) * cs, f = blockFeatures(b);
+      if (f.solid) {
+        if (f.rubble) { g.fillStyle = COLORS.rubble; g.fillRect(X, Y, cs, cs); }
+        continue;
+      }
+      // the original shows an illusionary wall block grey until illusions are shown
+      if (f.illusionBlock && !Settings.v.illusionary) { g.fillStyle = '#bbbbbb'; g.fillRect(X, Y, cs, cs); }
+      g.fillStyle = COLORS.wall;
+      for (let d = 0; d < 4; d++) {
+        const illusion = f.sides.some(s => s.d === d && s.cat === CAT.illusion);
+        if (f.walls[d] || (illusion && !Settings.v.illusionary)) this.wallLine(g, X, Y, cs, d, wt);
+      }
+      if (f.center) this.center(g, X, Y, cs, f.center, f.doorNS);
+      for (const s of f.sides) this.side(g, X, Y, cs, s.d, s.cat, wt);
+    }
+    // clue book hints: the cell bright green over what is in it, like the original (numbers further down)
+    if (Settings.v.hints) for (const h of this.hintList) {
+      const b = h.y * 32 + h.x;
+      if (shown(b)) { g.fillStyle = COLORS.hint; g.fillRect(h.x * cs + wt / 2, h.y * cs + wt / 2, cs - wt, cs - wt); }
+    }
+    // items
+    if (Settings.v.items) {
+      const seen = new Set();
+      for (let i = 1; i < Game.cfg.items; i++) {
+        const it = Game.item(i);
+        if (it.level !== lv || it.block > 1023 || !shown(it.block) || seen.has(it.block)) continue;
+        if (it.pos > 8) continue;
+        seen.add(it.block);
+        const X = (it.block & 31) * cs, Y = (it.block >> 5) * cs, h = cs * 0.16;
+        g.fillStyle = COLORS.item; g.beginPath();
+        g.moveTo(X + cs * 0.5, Y + cs * 0.5 - h); g.lineTo(X + cs * 0.5 + h, Y + cs * 0.5);
+        g.lineTo(X + cs * 0.5, Y + cs * 0.5 + h); g.lineTo(X + cs * 0.5 - h, Y + cs * 0.5); g.closePath(); g.fill();
+      }
+    }
+    // monsters
+    if (Settings.v.monsters) for (let i = 0; i < 30; i++) {
+      const m = Game.monster(i);
+      if (!m.hpMax || m.block > 1023 || m.hpCur <= 0 && !Settings.v.debug) continue;
+      if (!shown(m.block) && !Settings.v.debug) continue;
+      const X = (m.block & 31) * cs, Y = (m.block >> 5) * cs;
+      const qx = m.pos === 1 || m.pos === 3 ? 0.7 : m.pos === 4 ? 0.5 : 0.3, qy = m.pos >= 2 && m.pos !== 4 ? 0.7 : m.pos === 4 ? 0.5 : 0.3;
+      g.fillStyle = COLORS.monster; g.beginPath(); g.arc(X + cs * qx, Y + cs * qy, cs * 0.14, 0, 7); g.fill();
+    }
+    // hint numbers
+    g.font = `${Math.max(7, Math.round(cs * 0.34))}px Tahoma, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    if (Settings.v.hints) for (const h of this.hintList) {
+      const b = h.y * 32 + h.x;
+      if (!shown(b)) continue;
+      g.fillStyle = '#000'; g.fillText(h.id, h.x * cs + cs / 2, h.y * cs + cs / 2 + 1);
+    }
+    this.overlay(g, cs);
+  },
+  // EOB 3 (like ASE3): explored open cells, walls where they meet wall cells
+  draw3() {
+    const cs = this.cellSize(), c = this.canvas, g = c.getContext('2d'), size = cs * 32, m = Game.map;
+    if (c.width !== size) { c.width = size; c.height = size; }
+    g.fillStyle = COLORS.rock; g.fillRect(0, 0, size, size);
+    const exp = Store.exp(Game.level), all = Date.now() < this.peekUntil;
+    $('#peek').classList.toggle('hidden', !all);
+    const wt = Math.max(2, Math.round(cs / 8)), open = b => m[b] === 0xFF && (all || exp[b]);
+    for (let b = 0; b < 1024; b++) {
+      if (!open(b)) continue;
+      const X = (b & 31) * cs, Y = (b >> 5) * cs;
+      g.fillStyle = COLORS.floor; g.fillRect(X, Y, cs, cs);
+      g.strokeStyle = COLORS.grid; g.lineWidth = 1; g.strokeRect(X + 0.5, Y + 0.5, cs - 1, cs - 1);
+    }
+    g.fillStyle = COLORS.wall;
+    for (let b = 0; b < 1024; b++) {
+      if (!open(b)) continue;
+      const x = b & 31, y = b >> 5, X = x * cs, Y = y * cs;
+      if (y > 0 && m[b - 32] !== 0xFF) this.wallLine(g, X, Y, cs, 0, wt);
+      if (x < 31 && m[b + 1] !== 0xFF) this.wallLine(g, X, Y, cs, 1, wt);
+      if (y < 31 && m[b + 32] !== 0xFF) this.wallLine(g, X, Y, cs, 2, wt);
+      if (x > 0 && m[b - 1] !== 0xFF) this.wallLine(g, X, Y, cs, 3, wt);
+    }
+    g.font = `bold ${Math.max(9, Math.round(cs * 0.36))}px Tahoma, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    this.overlay(g, cs);
+  },
+  // notes, the party, the cell under the mouse
+  overlay(g, cs) {
+    if (Settings.v.notes) for (const [b, text] of Object.entries(this.notes)) {
+      const id = text.split('\n')[0].slice(0, 3);
+      g.fillStyle = COLORS.note; g.fillText(id, (b & 31) * cs + cs / 2, (b >> 5) * cs + cs / 2);
+    }
+    const px = Game.x * cs, py = Game.y * cs, d = Game.dir;
+    g.fillStyle = COLORS.party; g.beginPath();
+    const pts = [[0.5, 0.15], [0.85, 0.82], [0.15, 0.82]].map(([u, v]) => {
+      const [rx, ry] = d === 0 ? [u, v] : d === 1 ? [1 - v, u] : d === 2 ? [1 - u, 1 - v] : [v, 1 - u];
+      return [px + rx * cs, py + ry * cs];
+    });
+    g.moveTo(...pts[0]); g.lineTo(...pts[1]); g.lineTo(...pts[2]); g.closePath(); g.fill();
+    if (this.mouse) {
+      g.strokeStyle = '#ff2020'; g.lineWidth = 1;
+      g.strokeRect(this.mouse.x * cs + 0.5, this.mouse.y * cs + 0.5, cs - 1, cs - 1);
+    }
+  },
+  wallMark(g, X, Y, cs, d, color, len) {
+    const s = Math.max(3, Math.round(cs * len)), t = Math.max(3, Math.round(cs / 5));
+    g.fillStyle = color;
+    if (d === 0) g.fillRect(X + (cs - s) / 2, Y + 1, s, t);
+    else if (d === 2) g.fillRect(X + (cs - s) / 2, Y + cs - t - 1, s, t);
+    else if (d === 1) g.fillRect(X + cs - t - 1, Y + (cs - s) / 2, t, s);
+    else g.fillRect(X + 1, Y + (cs - s) / 2, t, s);
+  },
+  wallLine(g, X, Y, cs, d, wt) {
+    if (d === 0) g.fillRect(X, Y, cs, wt);
+    else if (d === 1) g.fillRect(X + cs - wt, Y, wt, cs);
+    else if (d === 2) g.fillRect(X, Y + cs - wt, cs, wt);
+    else g.fillRect(X, Y, wt, cs);
+  },
+  // what a block holds: doors, stairs, plates, holes, teleporters, ...
+  center(g, X, Y, cs, cat, ns = true) {
+    const m = cs / 2, t = Math.max(2, Math.round(cs / 7));
+    const bar = color => { g.fillStyle = color; if (ns) g.fillRect(X + 1, Y + (cs - t) / 2, cs - 2, t); else g.fillRect(X + (cs - t) / 2, Y + 1, t, cs - 2); };
+    const frame = color => {   // an open door: just the frame on both walls
+      g.fillStyle = color; const s = Math.max(2, Math.round(cs / 6));
+      if (ns) { g.fillRect(X + 1, Y + (cs - t) / 2, s, t); g.fillRect(X + cs - 1 - s, Y + (cs - t) / 2, s, t); }
+      else { g.fillRect(X + (cs - t) / 2, Y + 1, t, s); g.fillRect(X + (cs - t) / 2, Y + cs - 1 - s, t, s); }
+    };
+    if (cat === CAT.buttonDoor) bar(Settings.v.buttons ? COLORS.button : COLORS.door);
+    else if (cat === CAT.buttonDoorOpen) frame(Settings.v.buttons ? COLORS.button : COLORS.door);
+    else if (cat === CAT.door) bar(COLORS.door);
+    else if (cat === CAT.doorOpen) frame(COLORS.door);
+    else if (cat === CAT.up || cat === CAT.down) {
+      g.fillStyle = COLORS.stairs; g.beginPath();
+      if (cat === CAT.up) { g.moveTo(X + m, Y + cs * 0.18); g.lineTo(X + cs * 0.82, Y + cs * 0.8); g.lineTo(X + cs * 0.18, Y + cs * 0.8); }
+      else { g.moveTo(X + m, Y + cs * 0.82); g.lineTo(X + cs * 0.82, Y + cs * 0.2); g.lineTo(X + cs * 0.18, Y + cs * 0.2); }
+      g.closePath(); g.fill();
+    } else if (cat === CAT.hole) {
+      g.fillStyle = COLORS.pit; g.fillRect(X + cs * 0.2, Y + cs * 0.2, cs * 0.6, cs * 0.6);
+    } else if (cat === CAT.plate) {
+      g.fillStyle = COLORS.plate; g.beginPath(); g.arc(X + m, Y + m, cs * 0.24, 0, 7); g.fill();
+    } else if (cat === CAT.teleporter) {
+      g.strokeStyle = COLORS.teleporter; g.lineWidth = Math.max(1, cs / 10); g.beginPath(); g.arc(X + m, Y + m, cs * 0.3, 0, 7); g.stroke();
+    } else if (cat === CAT.pedestal) {
+      g.fillStyle = '#9a9a9a'; g.fillRect(X + cs * 0.32, Y + cs * 0.32, cs * 0.36, cs * 0.36);
+    } else if (cat === CAT.lightOff || cat === CAT.lightOn) {
+      g.fillStyle = cat === CAT.lightOn ? '#f0d020' : '#6a6a5a'; g.beginPath(); g.arc(X + m, Y + m, cs * 0.18, 0, 7); g.fill();
+    } else if (cat === CAT.wallOfForce) {
+      g.fillStyle = '#4080ff'; g.globalAlpha = 0.45; g.fillRect(X + 2, Y + 2, cs - 4, cs - 4); g.globalAlpha = 1;
+    } else if (cat === CAT.bashable) {
+      g.strokeStyle = '#7a5a3a'; g.lineWidth = Math.max(1, cs / 10);
+      g.beginPath(); g.moveTo(X + cs * 0.25, Y + cs * 0.25); g.lineTo(X + cs * 0.75, Y + cs * 0.75);
+      g.moveTo(X + cs * 0.75, Y + cs * 0.25); g.lineTo(X + cs * 0.25, Y + cs * 0.75); g.stroke();
+    }
+  },
+  // things on a wall seen from this block: buttons, switches, niches, keyholes, ...
+  side(g, X, Y, cs, d, cat, wt) {
+    if (cat === CAT.illusion) {
+      if (!Settings.v.illusionary) return;
+      g.fillStyle = COLORS.illusion; this.wallLine(g, X, Y, cs, d, wt); return;
+    }
+    if (cat === CAT.cornerFix || cat === CAT.rubble) return;
+    const big = cat === CAT.niche || cat === CAT.portal;
+    if ((cat === CAT.button || cat === CAT.switch) && !Settings.v.buttons) return;
+    const color = { [CAT.button]: COLORS.button, [CAT.switch]: '#0a7a6a', [CAT.niche]: COLORS.niche, [CAT.keyhole]: '#c09010',
+      [CAT.portal]: '#8a40c0', [CAT.eyeNiche]: '#2f7fd0', [CAT.chain]: '#606060', [CAT.mount]: '#2f7fd0',
+      [CAT.jewelBox]: '#c04080' }[cat] || COLORS.object;
+    this.wallMark(g, X, Y, cs, d, color, big ? 0.36 : 0.18);
+  },
+  cellAt(ev) {
+    const r = this.canvas.getBoundingClientRect(), cs = this.canvas.width / 32;
+    const x = Math.floor((ev.clientX - r.left) / cs), y = Math.floor((ev.clientY - r.top) / cs);
+    return x >= 0 && y >= 0 && x < 32 && y < 32 ? { x, y, b: y * 32 + x } : null;
+  },
+};
+
+function describeCell(c) {
+  const b = c.b, lines = [Game.id === 3 ? `${pad2(c.x + 1)},${pad2(c.y + 1)}` : `${pad2(c.x)},${pad2(c.y)}`];
+  if (!Game.map || !Game.coords) return lines.join('\n');
+  const all = Date.now() < Render.peekUntil || Store.exp(Game.level)[b] || Settings.v.debug;
+  if (!all) return lines.join('\n') + '  (unexplored)';
+  if (Game.id === 3) {
+    lines.push(Game.map[b] === 0xFF ? 'open' : 'wall');
+    if (Render.notes[b]) lines.push('Note: ' + Render.notes[b]);
+    if (Settings.v.debug) lines.push(`map byte ${hex(Game.map[b], 2)} at ${hex(Game.mapAddr + b, 6)}`);
+    return lines.join('\n');
+  }
+  // EOB 1/2 like the original's tooltip: the cell, then blocks of what is there
+  // (items and monsters when they are shown, with their bytes in debug mode),
+  // the clue book hint as "N. text"; nothing at all for plain floor
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const f = blockFeatures(b), blocks = [], what = [];
+  if (f.solid) { if (f.rubble) what.push('Rubble'); }   // plain walls get no tooltip either
+  else if (f.illusionBlock) what.push('Illusionary wall');
+  else if (f.center) what.push(cap(CAT_NAMES[f.center] || 'object'));
+  if (!f.illusionBlock) for (const s of f.sides) if (s.cat !== CAT.illusion || Settings.v.illusionary)
+    what.push(cap(`${CAT_NAMES[s.cat] || 'wall object'} on the ${DIRS[s.d]} wall`));
+  if (what.length) blocks.push(what.join('\n'));
+  const hexBytes = (a, n) => [...a.subarray(0, n)].map(v => hex(v, 2) + ' ').join('');
+  if (Settings.v.items) {
+    const out = [];
+    for (let i = 1; i < Game.cfg.items; i++) {
+      const it = Game.item(i);
+      if (it.level !== Game.level || it.block !== b || it.pos > 8) continue;
+      out.push(`- ${Game.itemName(it)}${it.pos === 8 ? ' (in the niche)' : ''}`);
+      if (Settings.v.debug) out.push(`${String(i).padStart(4, '0')}. $${hex(Game.addr('items') + i * 14, 6)}: ${hexBytes(Game.items.subarray(i * 14), 14)}`);
+    }
+    if (out.length) blocks.push(['Items:', ...out].join('\n'));
+  }
+  if (Settings.v.monsters) {
+    const out = [], s = Game.cfg.monSize;
+    for (let i = 0; i < 30; i++) {
+      const m = Game.monster(i);
+      if (!m.hpMax || m.block !== b || (m.hpCur <= 0 && !Settings.v.debug)) continue;
+      out.push(`- ${MONSTER_NAMES[Game.id][m.type] || 'Monster'} (${m.hpCur} / ${m.hpMax} hit points)`);   // EOB 2: no names
+      if (Settings.v.debug) out.push(`$${hex(Game.addr('monsters') + i * s, 6)}: ${hexBytes(Game.monsters.subarray(i * s), s)}`);
+    }
+    if (out.length) blocks.push(['Monsters:', ...out].join('\n'));
+  }
+  if (Settings.v.hints) for (const h of Render.hintList) if (h.y * 32 + h.x === b) blocks.push(`${h.id}. ${h.text}`);
+  const note = Render.notes[b];
+  if (note && Settings.v.notes) blocks.push('Note: ' + note);
+  if (!blocks.length) return null;
+  return ['', lines[0], '', blocks.join('\n\n')].join('\n');
+}
+
+/* -------------------------------------------------------- title bar */
+
+function updateTitle() {
+  if (!Game.coords) return;
+  const name = LEVEL_NAMES[Game.id][Game.level - 1] || '';
+  let t;
+  if (Game.id === 3) {   // ASE3: "Burial glen   [08,25]", counted from 1
+    t = `${name}   [${pad2(Game.x + 1)},${pad2(Game.y + 1)}]`;
+    if (Render.mouse) t += `   [${pad2(Render.mouse.x + 1)},${pad2(Render.mouse.y + 1)}]`;
+  } else {
+    t = `${pad2(Game.x)},${pad2(Game.y)} at level ${Game.level}: "${name}"`;
+    // the original adds the cell under the mouse, in debug mode also its four wall bytes
+    if (Render.mouse) t += `   (${pad2(Render.mouse.x)},${pad2(Render.mouse.y)})` + (Settings.v.debug ? '   ' +
+      [...Game.cell(Render.mouse.y * 32 + Render.mouse.x).subarray(0, 4)].map(v => hex(v, 2)).join(', ') : '');
+  }
+  $('#title').textContent = t;
+  document.title = `${t} - ASE`;
+}
+
+/* ------------------------------------------------------- main loop */
+
+async function loop() {
+  Settings.load();
+  $('#dbg').classList.toggle('hidden', !Settings.v.debug);
+  const q = new URLSearchParams(location.search);
+  if (q.get('asedata')) await importAseUrl(q.get('asedata')).catch(e => log(e.message));
+  if (q.get('ase3data')) await importAse3Url(q.get('ase3data')).catch(e => log(e.message));
+  if (q.get('gamedata')) {
+    Files.url = q.get('gamedata').replace(/\/?$/, '/');
+    await importExplored3().catch(e => log(e.message));
+  }
+  await Blocks.load();
+  try {
+    Game.info = await Api.info();
+  } catch {
+    setConn('no API', 'bad');
+    $('#msg').innerHTML = '<h2>DOSBox Staging\'s API is not reachable</h2><p>Open this page through DOSBox Staging\'s ' +
+      'webserver, e.g. <b>http://localhost:8086/ase.html</b>, with <code>webserver_enabled = on</code> in its config.</p>';
+    return;
+  }
+  let lastLevel = 0;
+  for (;;) {
+    try {
+      if (!Game.cfg) {
+        lastLevel = 0;
+        if (Game.hold) {   // EOB 3 search gave up: wait for "Search again"
+          setConn('not found', 'warn');
+          showMsg('The party was not found', Game.searchNote);
+          await sleep(500); continue;
+        }
+        setConn('searching', 'warn');
+        showMsg('Waiting for Eye of the Beholder', 'Start the game and load a saved game. ' +
+          'The All-Seeing Eye finds the party by itself.' + (Game.searchNote ? '\n\n' + Game.searchNote : ''));
+        if (!await Game.find()) { await sleep(2000); continue; }
+        showMsg('');
+        $('#game').textContent = Game.cfg.name; $('#game').classList.remove('hidden');
+        if (Game.id !== 3) log(`${Game.cfg.name} found: characters at ${hex(Game.char0, 6)}, map at ${hex(Game.addr('map'), 6)}, ` +
+          `items at ${hex(Game.addr('items'), 6)}, monsters at ${hex(Game.addr('monsters'), 6)}`);
+      }
+      await Game.poll();
+      if (Game.id === 3 ? !Game.valid3() : !(Game.chars[1] & 1) || Game.level < 1 || Game.level > Game.cfg.levels) {
+        if (Game.id === 3) log(`EOB 3: location (${[...Game.coords].map(v => hex(v, 2)).join(' ')}) or map no longer valid, searching again`);
+        Game.cfg = null; continue;
+      }
+      setConn(`DOSBox ${Game.info.version.split(' ')[0]}`, 'ok');
+      if (Game.id === 3 && lastLevel && Game.level !== lastLevel) {
+        // a new level: its map may be loaded anywhere
+        await sleep(400);
+        if (!await Game.find3(true)) { Game.cfg = null; continue; }
+        await Game.poll();
+        if (!Game.valid3()) { Game.cfg = null; continue; }
+      }
+      if (Game.level !== lastLevel) { lastLevel = Game.level; await Render.refreshAux(); }
+      partyExplore();
+      updateTitle();
+      Render.draw();
+      Editor.refresh();
+    } catch (e) {
+      setConn('DOSBox not answering', 'bad');
+      Game.cfg = null;
+      await sleep(1500);
+    }
+    await sleep(200);
+  }
+}
+function setConn(text, cls) { const c = $('#conn'); c.textContent = text; c.className = 'chip ' + cls; }
+function showMsg(title, text = '') {
+  const m = $('#msg');
+  if (!title) { m.replaceChildren(); return; }
+  m.replaceChildren(el('h2', { textContent: title }), ...text.split('\n\n').map(p => el('p', { textContent: p })));
+}
+
+/* ---------------------------------------------------------- events */
+
+const cv = Render.canvas;
+cv.addEventListener('mousemove', ev => {
+  const c = Render.cellAt(ev);
+  Render.mouse = c;
+  updateTitle();
+  Render.draw();
+  const tip = $('#tip');
+  const text = c && describeCell(c);
+  if (!text) { tip.style.display = 'none'; return; }
+  tip.textContent = text;
+  tip.style.display = 'block';
+  tip.style.left = Math.min(ev.clientX + 16, innerWidth - tip.offsetWidth - 4) + 'px';
+  tip.style.top = Math.min(ev.clientY + 16, innerHeight - tip.offsetHeight - 4) + 'px';
+});
+cv.addEventListener('mouseleave', () => { Render.mouse = null; $('#tip').style.display = 'none'; Render.draw(); updateTitle(); });
+cv.addEventListener('contextmenu', ev => { ev.preventDefault(); Menu.show(ev.clientX, ev.clientY); });
+$('#menuBtn').onclick = ev => { const r = ev.target.getBoundingClientRect(); Menu.show(r.right - 240, r.bottom); };
+window.addEventListener('resize', () => Render.draw());
+
+document.addEventListener('keydown', ev => {
+  if (ev.target.closest('input, select, textarea')) return;
+  const k = ev.key.toLowerCase(), s = Settings.v;
+  const toggle = key => () => { s[key] = !s[key]; Settings.save(); Render.draw(); };
+  const eob12 = Game.id !== 3 ? { b: toggle('buttons'), w: toggle('illusionary'), m: toggle('monsters'), i: toggle('items'),
+    h: toggle('hints') } : { e: () => Editor.open() };
+  const act = ev.ctrlKey ? { e: () => Editor.open(), s: backupSave, m: exportMap, d: toggleDebug, q: quit }[k]
+    : { a: addNote, z: peek, x: exploreLevel, t: teleportHere, pageup: () => zoomBy(+1), pagedown: () => zoomBy(-1),
+      ...eob12, n: toggle('notes'), r: () => openPdf('manual'), c: () => openPdf('cluebook'),
+      escape: () => { Menu.hide(); Dlg.closeTop(); } }[k];
+  if (act) { ev.preventDefault(); act(); }
+});
+
+async function setSlot(n) {
+  Settings.v.slot = n; Settings.save();
+  Store.flush(); Store.explored = {}; Store.notes = {};
+  await Render.refreshAux(); Render.draw();
+}
+
+function zoomBy(d) {
+  const z = Settings.v.zoom || Render.cellSize();
+  Settings.v.zoom = Math.max(8, Math.min(80, z + d * 4)); Settings.save(); Render.draw();
+}
+
+/* ---------------------------------------------------------- actions */
+
+async function addNote() {
+  const c = Render.mouse;
+  if (!c || !Game.coords) return;
+  const old = Render.notes[c.b] || '';
+  const text = prompt('Note for this place (the first 3 characters are shown on the map, empty removes it):', old);
+  if (text === null) return;
+  await Store.setNote(Game.level, c.b, text.trim());
+  Render.notes = await Store.notesOf(Game.level);
+}
+function peek() {
+  const now = Date.now();
+  Render.peekUntil = Math.max(Render.peekUntil, now) + 1500;
+  Render.draw();
+  setTimeout(() => Render.draw(), Render.peekUntil - now + 50);
+}
+function exploreLevel() { if (Game.coords && confirm('Really set the whole level map explored?')) Store.fill(Game.level, 1); }
+function unexploreLevel() { if (Game.coords && confirm('Really set the whole level map unexplored?')) Store.fill(Game.level, 0); }
+async function teleportHere() {
+  const c = Render.mouse;
+  if (!c || !Game.coords) return;
+  if (Game.id === 3) {
+    if (Game.map[c.b] !== 0xFF && !confirm('That is a wall. Teleport into it anyway?')) return;
+    await Api.write(Game.locAddr, Uint8Array.of(c.x, c.y));
+    log(`Teleported to ${pad2(c.x + 1)},${pad2(c.y + 1)}`);
+    return;
+  }
+  await Api.write(Game.addr('coords') + Game.cfg.coordBlock, Uint8Array.of(c.b & 255, c.b >> 8));
+  log(`Teleported to ${pad2(c.x)},${pad2(c.y)}`);
+}
+function searchAgain() {
+  Object.assign(Game, { cfg: null, hold: false, searchNote: '', coords: null, map: null, types: null, tweaked: false });
+  Render.draw();
+}
+// like the original: bit 40 (identified) in byte 2 of every item, the whole table written back
+async function identifyAll() {
+  const out = Game.items.slice();
+  for (let i = 0; i < Game.cfg.items; i++) out[i * 14 + 2] |= 0x40;
+  await Api.write(Game.addr('items'), out);
+  log('All items identified');
+}
+// the original's: in every item type (16 bytes) byte 5 = 3F (all classes) and
+// byte 6 = 0 (one hand); checked in the menu after that, and unchecking it
+// writes nothing (the game's own values come back when it reloads them)
+async function itemTweaks() {
+  if (Game.tweaked) { Game.tweaked = false; return; }
+  const a = Game.addr('itemTypes'), n = Game.cfg.itemTypes || 57, t = await Api.read(a, n * 16);
+  for (let i = 0; i < n; i++) { t[i * 16 + 5] = 0x3F; t[i * 16 + 6] = 0; }
+  await Api.write(a, t);
+  Game.tweaked = true;
+  log('Item usability tweaks applied');
+}
+async function weakenMonsters() {
+  const s = Game.cfg.monSize, m = Game.monsters.slice();
+  for (let i = 0; i < 30; i++) if ((m[i * s + 14] | m[i * s + 15] << 8) > 1) { m[i * s + 14] = 1; m[i * s + 15] = 0; }
+  await Api.write(Game.addr('monsters'), m);
+  log('Monsters weakened to 1 HP');
+}
+// what the original does (EOB 2): flag 20 in byte 16 of every monster with hit points
+async function petrifyMonsters() {
+  const s = Game.cfg.monSize, m = Game.monsters.slice();
+  for (let i = 0; i < 30; i++) if (m[i * s + 12] | m[i * s + 13]) m[i * s + 0x16] |= 0x20;
+  await Api.write(Game.addr('monsters'), m);
+  log('Monsters petrified');
+}
+// the original's Monsters.txt and Items.txt (addresses are linear ones here)
+function dumpMonsters() {
+  const s = Game.cfg.monSize, m = Game.monsters;
+  const cols = Array.from({ length: s }, (_, k) => hex(k, 2)).join(' ');
+  const lines = [`##   Address      ${cols}      XX,YY   Hit points`, ''];
+  for (let i = 0; i < 30; i++) {
+    const r = m.subarray(i * s, i * s + s), block = r[2] | r[3] << 8;
+    let line = `${pad2(i + 1)}   ${hex(Game.addr('monsters') + i * s, 8)}     ${[...r].map(v => hex(v, 2) + ' ').join('')}`;
+    if (block) line += `     ${pad2(block & 31)},${pad2(block >> 5)}   ${String(r[14] | r[15] << 8).padStart(3, '0')} / ${String(r[12] | r[13] << 8).padStart(3, '0')}`;
+    lines.push(line);
+  }
+  download(new Blob([lines.join('\r\n') + '\r\n']), 'Monsters.txt');
+}
+function dumpItems() {
+  const pad = ' '.repeat(67);
+  const lines = [pad + 'item name, unidentified', pad + '|  item name, identified (01 = empty, no identified name)',
+    pad + '|  |  bits ($80 = magical, $40 = identified)', pad + '|  |  |     item type',
+    pad + '|  |  |     | position on ground', pad + '|  |  |     |  |  position on level',
+    pad + '|  |  |     |  |  |  |              level', pad + '|  |  |     |  |  |  |              |  plusses or wand/potion/etc. subtype',
+    pad + '|  |  |     |  |  |  |              |  |', pad + '|  |  |     |  |  |  |              |  |',
+    '###   Address    Hex    Item                                 Byte  00 01 02 03 04 05 06 07 08 09 10 11 12 13     Level: XX,YY', ''];
+  for (let i = 0; i < Game.cfg.items; i++) {
+    const it = Game.item(i), r = Game.items.subarray(i * 14, i * 14 + 14);
+    let line = `${String(i).padStart(3, '0')}   ${hex(Game.addr('items') + i * 14, 8)}   ${hex(i & 255, 2)}${hex(i >> 8, 2)}   ` +
+      `${Game.itemName(it).padEnd(43)}${[...r].map(v => hex(v, 2) + ' ').join('')}`;
+    if (r[12]) { const b = r[6] | r[7] << 8; line += `    ${pad2(r[12])}: ${pad2(b & 31)},${pad2(b >> 5)}`; }
+    lines.push(line);
+  }
+  download(new Blob([lines.join('\r\n') + '\r\n']), 'Items.txt');
+}
+function exportMap() {
+  Render.canvas.toBlob(b => download(b, `EOB${Game.id} level ${Game.level}.png`));
+}
+function toggleDebug() {
+  Settings.v.debug = !Settings.v.debug; Settings.save();
+  $('#dbg').classList.toggle('hidden', !Settings.v.debug);
+  Render.draw();
+}
+function quit() { window.close(); }
+
+/* ------------------------------------------------------ files */
+
+// the ASE or ASE3 folder (hints, Blocks.dat; level maps, item names) and the
+// game folder (saves, manuals)
+function pickFolder(kind) {
+  const inp = $('#folderInput');
+  inp.value = '';
+  inp.onchange = async () => {
+    const files = [...inp.files];
+    if (kind === 'ase') {
+      let n = 0;
+      for (const f of files) {
+        const p = f.webkitRelativePath.split('/').slice(1).join('/');
+        let m = p.match(/^EOB([12])\/(Hints_\d\d\.txt|Blocks\.dat)$/i);
+        if (m) { await DB.put('files', `ASE:EOB${m[1]}/${normalAseName(m[2])}`, await f.arrayBuffer()); n++; continue; }
+        m = p.match(/^Maps\/(\d\d)\.dat$/i);
+        if (m) { await DB.put('files', `ASE3:Maps/${m[1]}.dat`, await f.arrayBuffer()); n++; continue; }
+        if (/^Items\.txt$/i.test(p)) { await DB.put('files', 'ASE3:Items.txt', await f.arrayBuffer()); n++; }
+      }
+      Hints.cache = {}; Maps3.cache = {}; await Blocks.load(); await Render.refreshAux(); Render.draw();
+      log(n ? `ASE data imported (${n} files)` : 'No ASE or ASE3 data files in that folder');
+    } else {
+      const top = files.filter(f => f.webkitRelativePath.split('/').length <= 3);
+      Object.assign(Files, { game: top, dir: null, url: '' });
+      for (const f of top) if (/^(manual|cluebook)\.pdf$/i.test(f.name)) await DB.put('files', 'PDF:' + f.name.toLowerCase().replace('.pdf', ''), f);
+      log(`Game folder chosen (${top.length} files)`);
+      await afterGameFolder();
+    }
+  };
+  if (kind === 'game' && window.showDirectoryPicker) {
+    // a folder handle can also write (Apply to save, the save editor)
+    showDirectoryPicker({ id: 'eobgame', mode: 'readwrite' }).then(async d => {
+      Object.assign(Files, { dir: d, game: null, url: '' });
+      log(`Game folder chosen: ${d.name}`);
+      await afterGameFolder();
+    }, e => { if (e.name !== 'AbortError') inp.click(); });
+    return;
+  }
+  inp.click();
+}
+async function afterGameFolder() {
+  await importExplored3();
+  Saves3.refresh();
+  if (Files.after) { const a = Files.after; Files.after = null; a(); }
+}
+// the manual or clue book from the game folder, else the copy kept from an earlier pick
+async function findPdf(key) {
+  if (Files.dir) {
+    for await (const [name, h] of Files.dir.entries()) if (h.kind === 'file' && name.toLowerCase() === key + '.pdf') return h.getFile();
+  } else if (Files.url) {
+    for (const name of [key.toUpperCase() + '.pdf', key[0].toUpperCase() + key.slice(1) + '.pdf', key + '.pdf']) {
+      const r = await fetch(Files.url + name, { method: 'HEAD' }).catch(() => null);
+      if (r?.ok) return Files.url + name;
+    }
+  }
+  return DB.get('files', 'PDF:' + key);
+}
+// the game folder: files picked with the folder dialog, a folder handle
+// (Chromium's File System Access API: also writable), or a folder the
+// webserver serves (?gamedata=<folder>, read only)
+const Files = {
+  game: null, dir: null, url: '', after: null,
+  has() { return !!(this.game || this.dir || this.url); },
+  async handle(path) {
+    let d = this.dir;
+    const parts = path.split('/');
+    for (const p of parts.slice(0, -1)) d = await d.getDirectoryHandle(p);
+    return d.getFileHandle(parts.at(-1));
+  },
+  // { data: Uint8Array, date: ms } or null
+  async get(path) {
+    try {
+      if (this.dir) { const f = await (await this.handle(path)).getFile(); return { data: new Uint8Array(await f.arrayBuffer()), date: f.lastModified }; }
+      if (this.game) { const f = gameFile(path); return f ? { data: new Uint8Array(await f.arrayBuffer()), date: f.lastModified } : null; }
+      if (this.url) {
+        const r = await fetch(this.url + path, { cache: 'no-store' });
+        return r.ok ? { data: new Uint8Array(await r.arrayBuffer()), date: Date.parse(r.headers.get('Last-Modified')) || 0 } : null;
+      }
+    } catch {}
+    return null;
+  },
+  async read(path) { return (await this.get(path))?.data || null; },
+  // writes into the game folder when it is writable, else offers a download
+  async write(path, data) {
+    if (this.dir) {
+      try {
+        if (await this.dir.requestPermission({ mode: 'readwrite' }) === 'granted') {
+          const w = await (await this.handle(path)).createWritable();
+          await w.write(data); await w.close();
+          return true;
+        }
+      } catch (e) { log(`Writing ${path}: ${e.message}`); }
+    }
+    download(new Blob([data]), path.split('/').at(-1));
+    alert(`The game folder can't be written from here, so ${path.split('/').at(-1)} was downloaded instead. ` +
+      `Copy it into the game's ${path.split('/').slice(0, -1).join('/') || 'main'} folder.`);
+    return false;
+  },
+};
+const normalAseName = n => /^blocks\.dat$/i.test(n) ? 'Blocks.dat' : 'Hints_' + n.slice(6, 8) + '.txt';
+// a file of the chosen game folder by its path below it ("SAVEGAME/ITEMS_01.BIN")
+function gameFile(path) {
+  path = path.toLowerCase();
+  return Files.game?.find(f => f.webkitRelativePath.split('/').slice(1).join('/').toLowerCase() === path) || null;
+}
+
+// ?asedata=<folder> (ASE's) and ?ase3data=<folder> (ASE3's): data from a
+// folder the webserver serves (relative to this page)
+async function importAseUrl(base) {
+  if (!base.endsWith('/')) base += '/';
+  let n = 0;
+  for (const id of [1, 2]) for (const name of ['Blocks.dat', ...Array.from({ length: 16 }, (_, i) => `Hints_${pad2(i + 1)}.txt`)]) {
+    const r = await fetch(`${base}EOB${id}/${name}`, { cache: 'no-store' });
+    if (!r.ok) continue;
+    await DB.put('files', `ASE:EOB${id}/${name}`, await r.arrayBuffer()); n++;
+  }
+  log(`ASE data imported from ${base} (${n} files)`);
+}
+async function importAse3Url(base) {
+  if (!base.endsWith('/')) base += '/';
+  let n = 0;
+  for (const name of [...Array.from({ length: 14 }, (_, i) => `Maps/${pad2(i + 1)}.dat`), 'Items.txt']) {
+    const r = await fetch(base + name, { cache: 'no-store' });
+    if (!r.ok) continue;
+    await DB.put('files', 'ASE3:' + name, await r.arrayBuffer()); n++;
+  }
+  Maps3.cache = {};
+  log(`ASE3 data imported from ${base} (${n} files)`);
+}
+// ASE3 kept explored maps in <game>\ASE\Explored_NN.dat (per save slot, 14
+// levels x 1024 bytes, column by column: x * 32 + y)
+async function importExplored3() {
+  let n = 0;
+  for (let slot = 1; slot <= 12; slot++) {
+    const d = await Files.read(`ASE/Explored_${pad2(slot)}.dat`);
+    if (!d) continue;
+    for (let lv = 1; lv <= 14 && lv * 1024 <= d.length; lv++) {
+      const k = `3:${slot}:${lv}`, old = await DB.get('kv', 'exp:' + k), m = old ? new Uint8Array(old) : new Uint8Array(1024);
+      for (let i = 0; i < 1024; i++) m[i] |= d[(lv - 1) * 1024 + ((i & 31) << 5 | i >> 5)] ? 1 : 0;
+      await DB.put('kv', 'exp:' + k, m.buffer);
+      if (Store.explored[k]) Store.explored[k].set(m.map((v, i) => v | Store.explored[k][i]));
+    }
+    n++;
+  }
+  if (n) { log(`Explored maps of ${n} save slot(s) taken over from ASE3`); Store.gen++; Render.draw(); }
+}
+
+async function openPdf(key) {
+  const f = await findPdf(key);
+  if (!f) { alert(`${key === 'manual' ? 'Manual.pdf' : 'Cluebook.pdf'} wasn't found: choose the game folder (menu: Game folder).`); return; }
+  window.open(typeof f === 'string' ? f : URL.createObjectURL(new Blob([f], { type: 'application/pdf' })), '_blank');
+}
+
+async function backupSave() {
+  if (!Files.has()) { alert('Choose the game folder: the backup takes the saved games from there.'); Files.after = backupSave; pickFolder('game'); return; }
+  const names = [];
+  if (Game.id === 3) {   // SAVEGAME\: the directory, each slot's ITEMS_NN.BIN and LVLnn_NN.BIN
+    names.push('SAVEGAME/SAVEGAME.DIR');
+    for (let s = 0; s <= 12; s++) {
+      names.push(`SAVEGAME/ITEMS_${pad2(s)}.BIN`);
+      for (let lv = 1; lv <= 14; lv++) names.push(`SAVEGAME/LVL${pad2(lv)}_${pad2(s)}.BIN`);
+    }
+  } else names.push('EOBDATA.SAV', ...Array.from({ length: 9 }, (_, i) => `EOBDATA${i + 1}.SAV`));
+  const entries = [];
+  for (const n of names) { const d = await Files.read(n); if (d) entries.push([n.split('/').at(-1), d]); }
+  if (!entries.length) { alert(`No saved games (${Game.id === 3 ? 'SAVEGAME\\' : 'EOBDATA*.SAV'}) in the game folder.`); return; }
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+  download(zipStore(entries), `EOB${Game.id} saves ${stamp}.zip`);
+  log(`Saved games backed up (${entries.length} files)`);
+}
+
+function download(blob, name) {
+  const a = el('a', { href: URL.createObjectURL(blob), download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+function zipStore(entries) {
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = d => { let c = 0xFFFFFFFF; for (const b of d) c = crcTable[(c ^ b) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+  const parts = [], central = [];
+  let off = 0;
+  for (const [name, data] of entries) {
+    const nm = new TextEncoder().encode(name), c = crc(data);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint32(14, c, true);
+    h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, nm.length, true);
+    parts.push(new Uint8Array(h.buffer), nm, data);
+    const cd = new DataView(new ArrayBuffer(46));
+    cd.setUint32(0, 0x02014b50, true); cd.setUint16(4, 20, true); cd.setUint16(6, 20, true); cd.setUint32(16, c, true);
+    cd.setUint32(20, data.length, true); cd.setUint32(24, data.length, true); cd.setUint16(28, nm.length, true);
+    cd.setUint32(42, off, true);
+    central.push(new Uint8Array(cd.buffer), nm);
+    off += 30 + nm.length + data.length;
+  }
+  const size = central.reduce((a, p) => a + p.length, 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+  end.setUint32(12, size, true); end.setUint32(16, off, true);
+  return new Blob([...parts, ...central, new Uint8Array(end.buffer)], { type: 'application/zip' });
+}
+
+/* ------------------------------------------------------------ menu */
+
+const Menu = {
+  items() {
+    const s = Settings.v, chk = (k, key) => ({ key, checked: s[k], act: () => { s[k] = !s[k]; Settings.save(); Render.draw(); } });
+    const slots = Array.from({ length: Game.cfg?.slots || 6 }, (_, i) => i + 1);
+    const common = [
+      { label: 'Add a note', key: 'A', act: addNote },
+      '-',
+      { label: 'Peek level', key: 'Z', act: peek },
+      { label: 'Explore level', key: 'X', act: exploreLevel },
+      { label: 'Unexplore level', act: unexploreLevel },
+      { label: 'Teleport here', key: 'T', act: teleportHere },
+      slots.length < 2 ? { label: 'Copy explored from ', disabled: true }   // EOB 1 has one saved game
+        : { label: 'Copy explored from ', sub: slots.map(n => ({ label: `Slot ${n}`, disabled: n === s.slot,
+          act: () => Store.copyFrom(n) })) },
+      ...(slots.length < 2 ? [] : [{ label: 'Save game slot', sub: slots.map(n => ({ label: `Slot ${n}`, checked: n === s.slot, act: () => setSlot(n) })) }]),
+      '-',
+      { label: 'Map window', sub: [
+        { label: 'Decrease size', key: 'PgDn', act: () => zoomBy(-1) }, { label: 'Increase size', key: 'PgUp', act: () => zoomBy(+1) },
+        { label: 'Fit to window', act: () => { s.zoom = 0; Settings.save(); Render.draw(); } },
+        { label: 'Open in its own window', act: () => window.open(location.href, 'ase', 'popup,width=900,height=920') }] },
+      '-',
+    ];
+    if (Game.id === 3) return [...common,
+      { label: 'Show', sub: [{ label: 'Notes', ...chk('notes', 'N') }] },
+      '-',
+      { label: 'Saved games…', act: () => Saves3.open() },
+      { label: 'Rule book', key: 'R', act: () => openPdf('manual') },
+      { label: 'Clue book', key: 'C', act: () => openPdf('cluebook') },
+      '-',
+      { label: 'Character editor', key: 'E', act: () => Editor.open() },
+      '-',
+      { label: 'Backup save game', key: 'Ctrl+S', act: backupSave },
+      { label: 'Export map', key: 'Ctrl+M', act: exportMap },
+      '-',
+      { label: 'ASE / ASE3 data folder…', act: () => pickFolder('ase') },
+      { label: 'Game folder…', act: () => pickFolder('game') },
+      { label: 'Legend', act: () => Legend.open() },
+      '-',
+      { label: 'Debug', sub: [
+        { label: 'Debug-mode', key: 'Ctrl+D', checked: s.debug, act: toggleDebug },
+        { label: 'Debug log', act: () => LogWin.open() }] },
+      { label: 'Search again', act: searchAgain },
+      '-',
+      { label: 'Quit', key: 'Ctrl+Q', act: quit },
+    ];
+    return [...common,
+      { label: 'Show', sub: [
+        { label: 'Buttons', ...chk('buttons', 'B') }, { label: 'Illusionary walls', ...chk('illusionary', 'W') },
+        { label: 'Monsters', ...chk('monsters', 'M') }, { label: 'Items', ...chk('items', 'I') },
+        { label: 'Hints', ...chk('hints', 'H') }, { label: 'Notes', ...chk('notes', 'N') }] },
+      '-',
+      { label: 'Identify all items', act: identifyAll },
+      { label: 'Item usability tweaks', checked: Game.tweaked, act: itemTweaks },
+      '-',
+      { label: 'Rule book', key: 'R', act: () => openPdf('manual') },
+      { label: 'Clue book', key: 'C', act: () => openPdf('cluebook') },
+      '-',
+      { label: 'Character editor', key: 'Ctrl+E', act: () => Editor.open() },
+      '-',
+      { label: 'Backup save game', key: 'Ctrl+S', act: backupSave },
+      '-',
+      { label: 'Export map', key: 'Ctrl+M', act: exportMap },
+      '-',
+      { label: 'ASE / ASE3 data folder…', act: () => pickFolder('ase') },
+      { label: 'Game folder…', act: () => pickFolder('game') },
+      { label: 'Legend', act: () => Legend.open() },
+      '-',
+      { label: 'Debug', sub: [
+        { label: 'Debug-mode', key: 'Ctrl+D', checked: s.debug, act: toggleDebug },
+        { label: 'Dump monsters', act: dumpMonsters }, { label: 'Dump items', act: dumpItems },
+        { label: 'Debug log', act: () => LogWin.open() }, '-',
+        // the original greys these out in EOB 1
+        { label: 'Weaken monsters to 1 HP', disabled: Game.id === 1, act: weakenMonsters },
+        { label: 'Petrify monsters', disabled: Game.id === 1, act: petrifyMonsters }] },
+      { label: 'Search again', act: searchAgain },
+      '-',
+      { label: 'Quit', key: 'Ctrl+Q', act: quit },
+    ];
+  },
+  build(items, x, y, level) {
+    const m = el('div', { className: 'menu' });
+    m.dataset.level = level;
+    for (const it of items) {
+      if (it === '-') { m.append(el('div', { className: 'sep' })); continue; }
+      const mi = el('div', { className: 'mi' + (it.checked ? ' chk' : '') + (it.sub ? ' sub' : '') + (it.disabled ? ' dis' : '') },
+        el('span', { textContent: it.label }), el('span', { className: 'k', textContent: it.key || '' }));
+      mi.onmouseenter = () => {
+        m.querySelectorAll('.mi.open').forEach(o => o.classList.remove('open'));
+        document.querySelectorAll('.menu').forEach(o => { if (+o.dataset.level > level) o.remove(); });
+        if (it.sub) { mi.classList.add('open'); const r = mi.getBoundingClientRect(); this.build(it.sub, r.right - 2, r.top - 4, level + 1); }
+      };
+      if (!it.sub && !it.disabled) mi.onclick = () => { this.hide(); it.act(); };
+      m.append(mi);
+    }
+    document.body.append(m);
+    const r = m.getBoundingClientRect();
+    m.style.left = Math.max(0, Math.min(x, innerWidth - r.width - 2)) + 'px';
+    m.style.top = Math.max(0, Math.min(y, innerHeight - r.height - 2)) + 'px';
+  },
+  show(x, y) { this.hide(); this.build(this.items(), x, y, 0); },
+  hide() { document.querySelectorAll('.menu').forEach(m => m.remove()); },
+};
+document.addEventListener('mousedown', ev => { if (!ev.target.closest('.menu')) Menu.hide(); });
+
+/* --------------------------------------------------------- dialogs */
+
+const Dlg = {
+  z: 40,
+  make(id, title, w) {
+    let d = document.getElementById(id);
+    if (d) { d.style.zIndex = ++this.z; return d; }
+    d = el('div', { id, className: 'dlg' });
+    const head = el('header', {}, el('span', { className: 't', textContent: title }),
+      el('button', { textContent: '✕', onclick: () => d.remove() }));
+    d.append(head, el('div', { className: 'body' }));
+    d.style.width = Math.min(w, innerWidth - 20) + 'px';
+    d.style.left = Math.max(10, (innerWidth - w) / 2) + 'px';
+    d.style.top = '50px';
+    d.style.zIndex = ++this.z;
+    document.body.append(d);
+    let drag = null;
+    head.onmousedown = e => { if (e.target.tagName === 'BUTTON') return; drag = [e.clientX - d.offsetLeft, e.clientY - d.offsetTop]; d.style.zIndex = ++this.z; };
+    document.addEventListener('mousemove', e => { if (drag) { d.style.left = e.clientX - drag[0] + 'px'; d.style.top = e.clientY - drag[1] + 'px'; } });
+    document.addEventListener('mouseup', () => drag = null);
+    return d;
+  },
+  closeTop() {
+    const all = [...document.querySelectorAll('.dlg')];
+    if (all.length) all.sort((a, b) => b.style.zIndex - a.style.zIndex)[0].remove();
+  },
+};
+
+const Legend = {
+  open() {
+    const d = Dlg.make('legend', 'Legend', 330), t = el('table', { className: 'legend' });
+    const row = (draw, text) => {
+      const c = el('canvas', { width: 28, height: 28 }), g = c.getContext('2d');
+      g.fillStyle = COLORS.floor; g.fillRect(0, 0, 28, 28); draw(g);
+      t.append(el('tr', {}, el('td', {}, c), el('td', { textContent: text })));
+    };
+    row(g => { g.fillStyle = COLORS.rock; g.fillRect(0, 0, 28, 28); }, 'rock / unexplored');
+    row(() => {}, 'floor');
+    row(g => { g.fillStyle = COLORS.wall; g.fillRect(0, 0, 28, 4); }, 'wall');
+    if (Game.id === 3) {   // ASE3's map has only these
+      row(g => { g.fillStyle = COLORS.party; g.beginPath(); g.moveTo(14, 4); g.lineTo(24, 23); g.lineTo(4, 23); g.fill(); }, 'the party');
+      row(g => { g.fillStyle = COLORS.note; g.font = 'bold 11px Tahoma'; g.fillText('ab', 7, 18); }, 'your note');
+      d.querySelector('.body').replaceChildren(t);
+      return;
+    }
+    row(g => { g.fillStyle = COLORS.rubble; g.fillRect(0, 0, 28, 28); }, 'rubble');
+    for (const cat of [CAT.buttonDoor, CAT.buttonDoorOpen, CAT.door, CAT.doorOpen, CAT.up, CAT.down, CAT.hole, CAT.plate,
+      CAT.teleporter, CAT.pedestal, CAT.lightOff, CAT.lightOn, CAT.wallOfForce, CAT.bashable])
+      row(g => Render.center(g, 0, 0, 28, cat), CAT_NAMES[cat]);
+    for (const cat of [CAT.button, CAT.switch, CAT.niche, CAT.keyhole, CAT.portal, CAT.eyeNiche, CAT.chain, CAT.mount,
+      CAT.jewelBox])
+      row(g => Render.side(g, 0, 0, 28, 0, cat, 4), CAT_NAMES[cat]);
+    row(g => { g.fillStyle = COLORS.illusion; g.fillRect(0, 0, 28, 4); }, 'illusionary wall (when shown)');
+    row(g => { g.fillStyle = COLORS.item; g.beginPath(); g.moveTo(14, 9); g.lineTo(19, 14); g.lineTo(14, 19); g.lineTo(9, 14); g.fill(); }, 'items');
+    row(g => { g.fillStyle = COLORS.monster; g.beginPath(); g.arc(14, 14, 4, 0, 7); g.fill(); }, 'monster');
+    row(g => { g.fillStyle = COLORS.hint; g.font = 'bold 11px Tahoma'; g.fillText('12', 7, 18); }, 'clue book hint');
+    row(g => { g.fillStyle = COLORS.note; g.font = 'bold 11px Tahoma'; g.fillText('ab', 7, 18); }, 'your note');
+    d.querySelector('.body').replaceChildren(t);
+  },
+};
+
+/* ------------------------------------------- EOB 3: location choice */
+
+// several places in memory look like the party location: list them live; the
+// one that changes when the party moves is it (picked by itself when only one
+// changes, or by a click)
+const LocationChooser = {
+  choose(locs) {
+    return new Promise(resolve => {
+      const d = Dlg.make('locchoose', 'Possible location addresses', 420), body = d.querySelector('.body');
+      const t = el('table', { className: 'list' });
+      body.replaceChildren(el('p', { textContent: 'Found several possible party locations in memory. Move the party or ' +
+        'turn in the game: the row that changes with it is the party. It is picked by itself when only one row changes, ' +
+        'or click it. Close the window to cancel.' }), t);
+      t.append(el('tr', {}, ...['address', 'x,y', 'facing', 'level'].map(h => el('th', { textContent: h }))));
+      let first = null, done = false, timer = 0;
+      const finish = v => { if (done) return; done = true; clearInterval(timer); d.remove(); resolve(v); };
+      d.querySelector('header button').onclick = () => finish(-1);
+      const rows = locs.map(a => { const tr = el('tr', { onclick: () => finish(a), style: 'cursor:pointer' }); t.append(tr); return tr; });
+      const tick = async () => {
+        const vals = await Promise.all(locs.map(a => Api.read(a, 4).catch(() => null)));
+        if (done) return;
+        first ??= vals.map(v => v?.join());
+        const changed = [];
+        vals.forEach((v, i) => {
+          const ok = v && v[0] < 32 && v[1] < 32 && v[2] < 4 && v[3] >= 1 && v[3] <= 14;
+          rows[i].replaceChildren(el('td', { textContent: hex(locs[i], 6) }),
+            el('td', { textContent: ok ? `${pad2(v[0] + 1)},${pad2(v[1] + 1)}` : '-' }),
+            el('td', { textContent: ok ? DIRS[v[2]] : '' }), el('td', { textContent: ok ? String(v[3]) : '' }));
+          if (ok && v.join() !== first[i]) changed.push(i);
+        });
+        if (changed.length === 1 && vals.filter(v => v).length > 1) finish(locs[changed[0]]);
+      };
+      timer = setInterval(tick, 500); tick();
+    });
+  },
+};
+
+/* ------------------------------------------- EOB 3: saved games */
+
+// SAVEGAME\SAVEGAME.DIR names the 12 slots (line n = ITEMS_nn.BIN); the
+// party's x, y, direction and level are bytes 252-255 of ITEMS_nn.BIN
+const Saves3 = {
+  list: null, sel: 0,
+  async load() {
+    const dir = await Files.read('SAVEGAME/SAVEGAME.DIR');
+    if (!dir) return this.list = null;
+    const names = new TextDecoder('latin1').decode(dir).split('\r\n');
+    const list = [];
+    for (let slot = 1; slot <= 12; slot++) {
+      const name = (names[slot - 1] || '').replace(/[\x1a\0].*$/s, '').trimEnd();
+      const used = !!name && !/^_+$/.test(name);
+      const f = used ? await Files.get(`SAVEGAME/ITEMS_${pad2(slot)}.BIN`) : null;
+      list.push({ slot, name: used ? name : '', items: f?.data || null, date: f?.date || 0,
+        loc: f && f.data.length >= 256 ? f.data.slice(252, 256) : null });
+    }
+    return this.list = list;
+  },
+  async newestLocation() {
+    const list = await this.load();
+    const used = (list || []).filter(s => s.loc).sort((a, b) => b.date - a.date);
+    return used[0]?.loc || null;
+  },
+  refresh() { if (document.getElementById('saves3')) this.open(); },
+  async open() {
+    const d = Dlg.make('saves3', 'EOB 3 saved games', 980), body = d.querySelector('.body');
+    if (!Files.has()) {
+      body.replaceChildren(el('p', { textContent: 'Choose the game folder (the one with SAVEGAME\\ in it) to see the saved games.' }),
+        el('button', { textContent: 'Game folder…', onclick: () => pickFolder('game') }));
+      return;
+    }
+    const list = await this.load();
+    if (!list) { body.replaceChildren(el('p', { textContent: 'No SAVEGAME\\SAVEGAME.DIR in the game folder.' })); return; }
+    if (!this.sel) this.sel = [...list].filter(s => s.loc).sort((a, b) => b.date - a.date)[0]?.slot || 1;
+    const fmtDate = ms => { if (!ms) return ''; const t = new Date(ms); return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}  ${pad2(t.getHours())}:${pad2(t.getMinutes())}`; };
+    const rows = el('table', { className: 'list', style: 'font-family:Consolas,monospace' });
+    for (const s of list) {
+      const lv = s.loc ? `${pad2(s.loc[3])}: ${LEVEL_NAMES[3][s.loc[3] - 1] || ''}` : '';
+      rows.append(el('tr', { className: s.slot === this.sel ? 'sel' : '', style: 'cursor:pointer',
+        onclick: () => { this.sel = s.slot; this.open(); }, ondblclick: () => setSlot(s.slot).then(() => this.open()) },
+        el('td', { textContent: pad2(s.slot) }), el('td', { textContent: s.name }),
+        el('td', { textContent: lv }), el('td', { textContent: s.name ? fmtDate(s.date) : '' })));
+    }
+    const s = list[this.sel - 1];
+    const full = el('input', { type: 'checkbox', checked: !!Settings.v.previewFull });
+    const cv = el('canvas', { width: 480, height: 480, style: 'background:var(--rock);cursor:crosshair' });
+    const level = el('select');
+    LEVEL_NAMES[3].forEach((n, i) => level.append(el('option', { value: i + 1, textContent: `${pad2(i + 1)}: ${n}` })));
+    const xIn = el('input', { type: 'number', min: 1, max: 32, style: 'width:56px' }), yIn = el('input', { type: 'number', min: 1, max: 32, style: 'width:56px' });
+    if (s.loc) { level.value = s.loc[3]; xIn.value = s.loc[0] + 1; yIn.value = s.loc[1] + 1; }
+    const draw = () => this.preview(cv, s, +level.value, +xIn.value - 1, +yIn.value - 1, full.checked);
+    full.onchange = () => { Settings.v.previewFull = full.checked; Settings.save(); draw(); };
+    level.onchange = xIn.oninput = yIn.oninput = draw;
+    cv.onmousedown = ev => {
+      const r = cv.getBoundingClientRect(), cs = cv.width / 32;
+      xIn.value = Math.floor((ev.clientX - r.left) / cs) + 1; yIn.value = Math.floor((ev.clientY - r.top) / cs) + 1; draw();
+    };
+    const apply = el('button', { textContent: 'Apply to save', disabled: !s.items, onclick: async () => {
+      const x = +xIn.value - 1, y = +yIn.value - 1, lv = +level.value;
+      if (!(x >= 0 && x < 32 && y >= 0 && y < 32)) { alert('X and Y go from 1 to 32.'); return; }
+      const data = s.items.slice();
+      data[252] = x; data[253] = y; data[255] = lv;
+      if (await Files.write(`SAVEGAME/ITEMS_${pad2(s.slot)}.BIN`, data))
+        log(`Save slot ${s.slot}: party set to level ${lv} at ${pad2(x + 1)},${pad2(y + 1)}`);
+      this.open();
+    } });
+    const slotNote = el('span', { className: 'muted', textContent: `Explored maps are kept per save slot; the map shows slot ${Settings.v.slot}` +
+      ' (double-click a saved game to use its slot).' });
+    body.replaceChildren(el('div', { className: 'cols' },
+      el('div', { style: 'flex:1;min-width:420px' },
+        el('fieldset', {}, el('legend', { textContent: ' Saved games ' }), rows),
+        el('p', {}, slotNote),
+        el('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' },
+          el('button', { textContent: 'Refresh saved games', onclick: () => this.open() }),
+          el('button', { textContent: 'Edit characters in save file', disabled: !s.items, onclick: () => Editor3.openFile(s.slot) }),
+          el('button', { textContent: 'Clear explored', onclick: () => this.clearExplored(s.slot) }),
+          el('button', { textContent: 'Backup save game', onclick: backupSave }))),
+      el('div', {}, cv,
+        el('div', {}, el('label', { style: 'display:inline-flex;gap:6px;margin:4px 0' }, full, 'Show preview map as fully explored')),
+        el('fieldset', {}, el('legend', { textContent: ' Party location in this save game ' }),
+          el('div', { style: 'display:flex;gap:6px;align-items:center' }, level, xIn, yIn, apply)))));
+    draw();
+  },
+  async preview(cv, s, level, px, py, full) {
+    const g = cv.getContext('2d'), cs = cv.width / 32;
+    g.fillStyle = COLORS.rock; g.fillRect(0, 0, cv.width, cv.height);
+    // the live map when the game is on that level, else ASE3's map of it
+    const m = Game.id === 3 && Game.map && Game.level === level ? Game.map : await Maps3.get(level);
+    if (!m) {
+      g.fillStyle = '#2b2010'; g.font = '14px Tahoma'; g.textAlign = 'center';
+      g.fillText('No map of this level: import ASE3\'s folder (menu: ASE / ASE3 data folder)', cv.width / 2, cv.height / 2);
+      return;
+    }
+    const exp = full ? null : new Uint8Array(await DB.get('kv', `exp:3:${s.slot}:${level}`) || new ArrayBuffer(1024));
+    const live = Store.explored[`3:${s.slot}:${level}`];
+    const open = b => m[b] === 0xFF && (full || exp[b] || live?.[b]);
+    for (let b = 0; b < 1024; b++) if (open(b)) { g.fillStyle = COLORS.floor; g.fillRect((b & 31) * cs, (b >> 5) * cs, cs, cs); }
+    g.fillStyle = COLORS.wall;
+    for (let b = 0; b < 1024; b++) {
+      if (!open(b)) continue;
+      const x = b & 31, y = b >> 5, X = x * cs, Y = y * cs;
+      if (y > 0 && m[b - 32] !== 0xFF) Render.wallLine(g, X, Y, cs, 0, 2);
+      if (x < 31 && m[b + 1] !== 0xFF) Render.wallLine(g, X, Y, cs, 1, 2);
+      if (y < 31 && m[b + 32] !== 0xFF) Render.wallLine(g, X, Y, cs, 2, 2);
+      if (x > 0 && m[b - 1] !== 0xFF) Render.wallLine(g, X, Y, cs, 3, 2);
+    }
+    if (px >= 0 && py >= 0 && px < 32 && py < 32) {
+      g.fillStyle = COLORS.party; g.beginPath(); g.arc(px * cs + cs / 2, py * cs + cs / 2, cs * 0.35, 0, 7); g.fill();
+    }
+  },
+  async clearExplored(slot) {
+    if (!confirm('Really clear explored maps from this save slot?')) return;
+    for (let lv = 1; lv <= 14; lv++) {
+      const k = `3:${slot}:${lv}`;
+      await DB.del('kv', 'exp:' + k);
+      if (Store.explored[k]) Store.explored[k].fill(0);
+      Store.dirty.delete(k);
+    }
+    Store.gen++; Render.draw(); this.open();
+    log(`Explored maps of save slot ${slot} cleared`);
+  },
+};
+
+/* ----------------------------------------------------------- editor */
+
+const Editor = {
+  cur: 0,
+  open() {
+    if (Game.id === 3) return Editor3.open();
+    if (!Game.chars) return;
+    Dlg.make('editor', 'Character editor', 760);
+    this.render();
+  },
+  refresh() { /* values are read when the editor is drawn; live fields keep the user's input */ },
+  render() {
+    const d = document.getElementById('editor');
+    if (!d) return;
+    const body = d.querySelector('.body'), party = Game.party(), cfg = Game.cfg;
+    if (!party.some(p => p.slot === this.cur)) this.cur = party[0]?.slot ?? 0;
+    const chars = el('div', { className: 'chars' });
+    for (const p of party) chars.append(el('button', { className: p.slot === this.cur ? 'sel' : '', textContent: p.name,
+      onclick: () => { this.cur = p.slot; this.render(); } }));
+    chars.append(el('button', { textContent: 'Refresh', onclick: () => this.render(), style: 'margin-top:8px' }));
+    const base = Game.char0 + this.cur * cfg.charSize, r = Game.chars.subarray(this.cur * cfg.charSize, (this.cur + 1) * cfg.charSize);
+    const fields = { str: 0x0D, strMax: 0x0E, strExt: 0x0F, strExtMax: 0x10, int: 0x11, intMax: 0x12, wis: 0x13, wisMax: 0x14,
+      dex: 0x15, dexMax: 0x16, con: 0x17, conMax: 0x18, cha: 0x19, chaMax: 0x1A };
+    const pending = {};
+    const num = (label, off, size = 1, max = 255) => {
+      const v = size === 1 ? r[off] : size === 2 ? r[off] | r[off + 1] << 8 : (r[off] | r[off + 1] << 8 | r[off + 2] << 16 | r[off + 3] << 24) >>> 0;
+      const inp = el('input', { type: 'number', min: 0, max, value: v });
+      inp.onchange = () => { pending[off] = [size, Math.max(0, Math.min(max, +inp.value || 0))]; };
+      return el('label', {}, el('span', { textContent: label }), inp);
+    };
+    const pick = (label, off, opts) => {
+      const sel = el('select');
+      opts.forEach((n, i) => sel.append(el('option', { value: i, textContent: n, selected: r[off] === i })));
+      sel.onchange = () => { pending[off] = [1, +sel.value]; };
+      return el('label', {}, el('span', { textContent: label }), sel);
+    };
+    const stats = el('div', {}, el('div', { className: 'muted', textContent: 'Statistics (cur / max)' }));
+    for (const [n, k] of [['Strength', 'str'], ['Str (%)', 'strExt'], ['Intelligence', 'int'], ['Wisdom', 'wis'],
+      ['Dexterity', 'dex'], ['Constitution', 'con'], ['Charisma', 'cha']]) {
+      stats.append(el('div', { style: 'display:flex;gap:6px' }, num(n, fields[k], 1, 100), num('', fields[k + 'Max'], 1, 100)));
+    }
+    const F = cfg.f;
+    stats.append(num('Hit points', F.hp, F.hpSize, F.hpSize > 1 ? 999 : 255), num('Max hit points', F.hpMax, F.hpSize, F.hpSize > 1 ? 999 : 255),
+      num('Armor class', F.ac, 1, 255), num('Food (%)', F.food, 1, 100),
+      pick('Race / sex', F.race, RACES.flatMap(rc => [rc + ' male', rc + ' female'])),
+      pick('Class', F.cls, CLASSES), pick('Alignment', F.align, ALIGN),
+      num('Level 1', F.level, 1, 30), num('Level 2', F.level + 1, 1, 30), num('Level 3', F.level + 2, 1, 30),
+      num('Experience 1', F.xp, 4, 99999999), num('Experience 2', F.xp + 4, 4, 99999999), num('Experience 3', F.xp + 8, 4, 99999999));
+    stats.append(el('button', { textContent: 'Save changes to character', style: 'margin-top:6px', onclick: async () => {
+      for (const [off, [size, v]] of Object.entries(pending)) {
+        const bytes = size === 1 ? [v] : size === 2 ? [v & 255, v >> 8] : [v & 255, v >> 8 & 255, v >> 16 & 255, v >>> 24];
+        await Api.write(base + +off, Uint8Array.from(bytes));
+      }
+      log(`${party.find(p => p.slot === this.cur)?.name}: ${Object.keys(pending).length} values saved`);
+      await Game.poll(); this.render();
+    } }));
+    // spells: EOB 1 keeps 5 levels x 6 memorization slots each for mage and cleric spells
+    const spells = el('div', {}, el('div', { className: 'muted', textContent: 'Memorized spells (spell number per slot, 0 = empty)' }));
+    for (const [label, start] of [['Mage', cfg.f.mage], ['Cleric', cfg.f.cleric]]) {
+      spells.append(el('div', { textContent: label, style: 'margin-top:4px' }));
+      for (let lvl = 0; lvl < cfg.f.spellLevels; lvl++) {
+        const row = el('div', { style: 'display:flex;gap:3px;margin-bottom:2px' }, el('span', { textContent: `L${lvl + 1}`, style: 'width:24px' }));
+        for (let k = 0; k < cfg.f.spellSlots; k++) {
+          const off = start + lvl * cfg.f.spellSlots + k, inp = el('input', { type: 'number', value: r[off] > 127 ? r[off] - 256 : r[off], style: 'width:46px' });
+          inp.onchange = () => Api.write(base + off, Uint8Array.of((+inp.value) & 255)).then(() => log(`${label} spell slot set`));
+          row.append(inp);
+        }
+        spells.append(row);
+      }
+    }
+    // inventory: 27 slots of item indexes
+    const inv = el('div', {}, el('div', { className: 'muted', textContent: 'Inventory (item index per slot)' }));
+    const slotNames = ['Left hand', 'Right hand', ...Array.from({ length: 14 }, (_, i) => `Backpack ${i + 1}`), 'Quiver', 'Armor',
+      'Wrist', 'Helmet', 'Necklace', 'Boots', 'Belt 1', 'Belt 2', 'Belt 3', 'Ring 1', 'Ring 2'];
+    const t = el('table', { className: 'list' });
+    for (let k = 0; k < 27; k++) {
+      const off = cfg.f.inv + k * 2, idx = r[off] | r[off + 1] << 8;
+      const inp = el('input', { type: 'number', min: 0, max: cfg.items - 1, value: idx, style: 'width:60px' });
+      inp.onchange = () => Api.write(base + off, Uint8Array.of(+inp.value & 255, +inp.value >> 8)).then(() => log(`Inventory slot ${k + 1} = item ${inp.value}`));
+      t.append(el('tr', {}, el('td', { textContent: slotNames[k] }), el('td', {}, inp),
+        el('td', { textContent: idx ? Game.itemName(Game.item(idx)) : '' })));
+    }
+    inv.append(t);
+    body.replaceChildren(el('div', { className: 'ed' }, chars, el('div', { className: 'cols' }, stats, spells, inv)));
+  },
+};
+
+/* ------------------------------------------- EOB 3: character editor */
+
+// A character (an AESOP object), offsets from its name: -38 the 27 item slots
+// (object numbers, FFFF empty), 0 name (20 bytes), 14 race, 15 class, 16
+// portrait, 19 alignment, 1A-1C levels, 22 hit points (signed), 24 maximum, 28
+// food, 2A/2E/32 experience (signed 32 bits), 36-3C STR, exceptional STR, INT,
+// WIS, DEX, CON, CHA, 110 mage spells and 174 cleric spells: 10 bytes per
+// level from level 1 at +10, FF = not available, else memorized count.
+// Records follow each other every 623 bytes in memory and every 627 bytes in
+// the saved game (ITEMS_nn.BIN, first name at 340); the party's member
+// objects (20 = the first record) precede the party location.
+const C3 = { from: -0x3C, to: 0x1BC, slots: -0x38, race: 0x14, cls: 0x15, portrait: 0x16, align: 0x19, level: 0x1A, hp: 0x22,
+  hpMax: 0x24, food: 0x28, xp: 0x2A, str: 0x36, strExt: 0x37, mage: 0x110, cleric: 0x174, memStride: 623, fileStride: 627,
+  fileFirst: 0x340, records: 10, firstId: 0x20 };
+const RACES3 = [...RACES, 'Sprite', 'Saurial'].flatMap(r => [r + ' male', r + ' female']);
+const MAGE3 = [
+  ['Armor', 'Burning Hands', 'Detect Magic', 'Magic Missile', 'Shield', 'Shocking Grasp'],
+  ['Blur', 'Detect Invisibility', 'Improved Invisibility', 'Invisibility', 'Protection from Paralysis', "Melf's Acid Arrow"],
+  ['Dispel Magic', 'Fireball', 'Haste', 'Hold Person', 'Hold Undead', "Invisibility, 10'", 'Lightning Bolt', 'Slow',
+    'Vampiric Touch', 'Water Breathing'],
+  ['Fear', 'Ice Storm', 'Improved Invisibility', 'Remove Curse'],
+  ['Cone of Cold', 'Hold Monster', 'Wall of Force'],
+  ['Death Spell', 'Disintegrate', 'Flesh to Stone', 'Stone to Flesh', 'True Seeing'],
+  ['Acid Storm', 'Finger of Death', "Mordenkainen's Sword", 'Power Word, Stun'],
+  ["Abi-Dalzim's Horrid Wilting", "Bigby's Clenched Fist"],
+  ['Energy Drain', 'Meteor Swarm', 'Power Word, Kill', 'Time Stop']];
+const CLERIC3 = [
+  ['Bless', 'Cause Light Wounds', 'Cure Light Wounds', 'Detect Magic', 'Protection from Evil', 'Turn Undead', 'Lay on Hands'],
+  ['Aid', 'Flame Blade', 'Hold Person', 'Resist Fire', 'Resist Cold', 'Spiritual Hammer', 'Slow Poison'],
+  ['Create Food and Water', 'Dispel Magic', 'Magical Vestment', 'Negative Plane Protection', 'Prayer', 'Protection from Fire',
+    'Remove Paralysis'],
+  ['Blessed Warmth', 'Cause Serious Wounds', 'Cure Serious Wounds', 'Free Action', 'Neutralize Poison', 'Poison',
+    "Protection from Evil, 10'"],
+  ['Cause Critical Wounds', 'Cure Critical Wounds', 'Flame Strike', 'Raise Dead', 'Slay Living', 'True Seeing'],
+  ['Harm', 'Heal', "Heroes' Feast", "Sol's Searing Orb"],
+  ['Fire Storm', 'Resurrection']];
+// ASE3's order of the equipment slots and each one's place in the record
+const SLOTS3 = [['Helmet', 25], ['Armor', 14], ['Medallion', 24], ['Bracers', 15], ['Ring 1', 17], ['Ring 2', 18], ['Boots', 19],
+  ['Ammunition', 26], ['Belt 1', 21], ['Belt 2', 22], ['Belt 3', 23], ['Hand 1', 16], ['Hand 2', 20],
+  ...Array.from({ length: 14 }, (_, i) => [`Backpack ${pad2(i + 1)}`, i])];
+
+const rec3 = {
+  name(r) { let s = ''; for (let k = 0; k < 20 && r[-C3.from + k]; k++) s += String.fromCharCode(r[-C3.from + k]); return s; },
+  get(r, off, size = 1, signed = false) {
+    const o = -C3.from + off;
+    let v = size === 1 ? r[o] : size === 2 ? r[o] | r[o + 1] << 8 : r[o] | r[o + 1] << 8 | r[o + 2] << 16 | r[o + 3] << 24;
+    if (signed && size === 2 && v > 0x7FFF) v -= 0x10000;
+    if (!signed && size === 4) v >>>= 0;
+    return v;
+  },
+  set(r, off, v, size = 1) { const o = -C3.from + off; for (let k = 0; k < size; k++) r[o + k] = v >> 8 * k & 255; },
+};
+// a record whose fields make sense (n = where its name is)
+function charOk3(m, n) {
+  let len = 0;
+  while (len < 20 && m[n + len]) { const c = m[n + len]; if (c < 32 || c > 126) return false; len++; }
+  if (len < 1 || len > 19) return false;
+  for (let k = len; k < 20; k++) if (m[n + k]) return false;
+  if (m[n + C3.race] > 15 || m[n + C3.cls] > 14 || m[n + C3.align] > 8 || m[n + C3.level] < 1 || m[n + C3.level] > 40) return false;
+  const hpMax = m[n + C3.hpMax] | m[n + C3.hpMax + 1] << 8;
+  if (!hpMax || hpMax > 999 || m[n + C3.food] > 100 || m[n + C3.strExt] > 100) return false;
+  for (let k = C3.str; k <= C3.str + 6; k++) if (k !== C3.strExt && (m[n + k] < 3 || m[n + k] > 25)) return false;
+  for (let k = 0; k < 27; k++) { const v = m[n + C3.slots + 2 * k] | m[n + C3.slots + 2 * k + 1] << 8; if (v !== 0xFFFF && v > 0x7FFF) return false; }
+  return true;
+}
+
+const Editor3 = {
+  src: null,   // { kind: 'mem' | 'file', recs: [{ index, at, data }], slot }
+  cur: 0, items: null,
+  async open() {
+    Dlg.make('editor3', 'Character editor', 1180).querySelector('.body').replaceChildren(
+      el('p', { textContent: 'Please wait, trying to locate characters in memory…' }));
+    const recs = await this.findInMemory();
+    if (!recs.length) {
+      document.querySelector('#editor3 .body').replaceChildren(el('p', { textContent: 'Characters not found in memory!' }));
+      return;
+    }
+    this.src = { kind: 'mem', recs };
+    log(`EOB 3 characters found: ${recs.map(r => `${rec3.name(r.data)} at ${hex(r.at, 6)}`).join(', ')}`);
+    await this.render();
+  },
+  // the saved game in slot n (Saved games dialog)
+  async openFile(slot) {
+    const data = await Files.read(`SAVEGAME/ITEMS_${pad2(slot)}.BIN`);
+    if (!data) { alert(`SAVEGAME\\ITEMS_${pad2(slot)}.BIN can't be read.`); return; }
+    const party = this.partyIds(data, 252), recs = [];
+    for (let k = 0; k < C3.records; k++) {
+      const at = C3.fileFirst + k * C3.fileStride;
+      if (at + C3.to > data.length || !charOk3(data, at)) continue;
+      if (party.length && !party.includes(k)) continue;
+      recs.push({ index: k, at, data: data.slice(at + C3.from, at + C3.to) });
+    }
+    if (!recs.length) { alert('No characters in that saved game.'); return; }
+    this.src = { kind: 'file', recs, slot, file: data };
+    Dlg.make('editor3', 'Character editor', 1180);
+    await this.render();
+  },
+  partyIds(m, loc) {
+    const out = [];
+    for (let k = 0; k < 7; k++) { const v = m[loc - 14 + 2 * k] | m[loc - 13 + 2 * k] << 8; if (v !== 0xFFFF) out.push(v - C3.firstId); }
+    return out;
+  },
+  async findInMemory() {
+    // where they were last time, else a search of all memory
+    const party = this.partyIds(await Api.read(Game.locAddr - 14, 18), 14);
+    if (this.base) {
+      const recs = await this.readRecords(this.base, party);
+      if (recs.length) return recs;
+      log('Characters not found in previous memory locations!');
+    }
+    const mem = await readAll();
+    const hits = [];
+    for (let n = -C3.from, end = mem.length - C3.to; n < end; n++) {
+      const c = mem[n];
+      if ((c >= 65 && c <= 90 || c >= 97 && c <= 122) && charOk3(mem, n)) hits.push(n);
+    }
+    // the array: the hit with the most hits following it every 623 bytes
+    let best = -1, score = 0;
+    for (const h of hits) {
+      let s = 0;
+      for (let k = 0; k < C3.records; k++) if (hits.includes(h + k * C3.memStride)) s++;
+      if (s > score) { best = h; score = s; }
+    }
+    if (best < 0) return [];
+    this.base = best;
+    return this.readRecords(best, party);
+  },
+  async readRecords(base, party) {
+    const recs = [];
+    for (let k = 0; k < C3.records; k++) {
+      if (party.length && !party.includes(k)) continue;
+      const at = base + k * C3.memStride, data = await Api.read(at + C3.from, C3.to - C3.from);
+      const view = new Uint8Array(C3.to - C3.from + 64); view.set(data);
+      if (!charOk3(view, -C3.from)) continue;
+      recs.push({ index: k, at, data, orig: data.slice() });
+    }
+    return recs;
+  },
+  async itemNames() {
+    if (this.items) return this.items;
+    const f = await DB.get('files', 'ASE3:Items.txt'), map = new Map();
+    if (f) for (const line of new TextDecoder('latin1').decode(f).split(/\r?\n/)) {
+      const m = line.match(/^(\d{4})\s+(.*\S)/);
+      if (m) map.set(+m[1], m[2]);
+    }
+    return this.items = map;
+  },
+  async render() {
+    const d = document.getElementById('editor3');
+    if (!d || !this.src) return;
+    const body = d.querySelector('.body'), { recs, kind } = this.src;
+    if (!recs.some(r => r.index === this.cur)) this.cur = recs[0].index;
+    const r = recs.find(x => x.index === this.cur), rd = r.data, items = await this.itemNames();
+    d.querySelector('header .t').textContent = kind === 'mem' ? 'Character editor (game memory)'
+      : `Character editor (saved game ${pad2(this.src.slot)}, ITEMS_${pad2(this.src.slot)}.BIN)`;
+    const chars = el('div', { className: 'chars' });
+    for (const x of recs) chars.append(el('button', { className: x.index === this.cur ? 'sel' : '', textContent: rec3.name(x.data),
+      onclick: () => { this.cur = x.index; this.render(); } }));
+    chars.append(el('button', { textContent: 'Apply changes', style: 'margin-top:8px', onclick: () => this.apply() }),
+      el('button', { textContent: kind === 'mem' ? 'Read again' : 'Reload file', onclick: () => kind === 'mem' ? this.open() : this.openFile(this.src.slot) }));
+    // stats
+    const num = (label, off, size = 1, signed = false, min = 0, max = 255) => {
+      const inp = el('input', { type: 'number', min, max, value: rec3.get(rd, off, size, signed) });
+      inp.onchange = () => rec3.set(rd, off, Math.max(min, Math.min(max, Math.round(+inp.value || 0))), size);
+      return el('label', {}, el('span', { textContent: label }), inp);
+    };
+    const pick = (label, off, opts) => {
+      const sel = el('select');
+      opts.forEach((n, i) => sel.append(el('option', { value: i, textContent: n, selected: rec3.get(rd, off) === i })));
+      sel.onchange = () => rec3.set(rd, off, +sel.value);
+      return el('label', {}, el('span', { textContent: label }), sel);
+    };
+    const pair = (...kids) => el('div', { style: 'display:flex;gap:6px' }, ...kids);
+    const stats = el('fieldset', {}, el('legend', { textContent: ' Stats ' }),
+      pick('Race', C3.race, RACES3), pick('Class', C3.cls, CLASSES), pick('Alignment', C3.align, ALIGN),
+      num('Portrait', C3.portrait), pair(num('Hit points', C3.hp, 2, true, -32768, 32767), num('/', C3.hpMax, 2, false, 0, 65535)),
+      num('Food level', C3.food, 1, false, 0, 100), pair(num('STR', C3.str), num('18/**', C3.strExt, 1, false, 0, 100)),
+      num('INT', C3.str + 2), num('WIS', C3.str + 3), num('DEX', C3.str + 4), num('CON', C3.str + 5), num('CHA', C3.str + 6),
+      ...[0, 1, 2].map(i => pair(num(`Level ${i + 1}`, C3.level + i, 1, false, 0, 40),
+        num('XP', C3.xp + 4 * i, 4, true, -1, 0x7FFFFFFF))));
+    // spells: a count per spell, "-" where not available
+    const spellBox = (title, levels, base) => {
+      const t = el('table', { className: 'list' });
+      levels.forEach((names, li) => names.forEach((n, i) => {
+        const off = base + (li + 1) * 10 + i, v = rec3.get(rd, off);
+        const inp = el('input', { type: 'text', value: v === 0xFF ? '-' : v, style: 'width:38px;text-align:right' });
+        inp.onchange = () => { const s = inp.value.trim(); rec3.set(rd, off, s === '-' || s === '' ? 0xFF : Math.max(0, Math.min(254, +s || 0))); };
+        const step = dv => () => { const cur = rec3.get(rd, off); const nv = cur === 0xFF ? (dv > 0 ? 0 : 0xFF) : cur + dv < 0 ? 0xFF : Math.min(254, cur + dv);
+          rec3.set(rd, off, nv); inp.value = nv === 0xFF ? '-' : nv; };
+        t.append(el('tr', {}, el('td', { textContent: i ? '' : String(li + 1) }), el('td', { textContent: n }), el('td', {}, inp),
+          el('td', {}, el('button', { textContent: '+', onclick: step(1) }), el('button', { textContent: '-', onclick: step(-1) }))));
+      }));
+      return el('fieldset', {}, el('legend', { textContent: ` ${title} ` }), el('div', { style: 'max-height:330px;overflow:auto' }, t));
+    };
+    // equipment
+    let slotSel = -1;
+    const eq = el('table', { className: 'list', style: 'font-family:Consolas,monospace' });
+    const eqRows = SLOTS3.map(([name, k], i) => {
+      const tr = el('tr', { style: 'cursor:pointer', onclick: () => { slotSel = i; eqRows.forEach((x, j) => x.classList.toggle('sel', j === i)); } });
+      tr.ondblclick = () => {
+        const v = prompt('Enter item number (decimal)', '');
+        if (v !== null && /^\d+$/.test(v.trim())) { rec3.set(rd, C3.slots + 2 * k, +v, 2); fill(); }
+      };
+      eq.append(tr);
+      return tr;
+    });
+    const fill = () => SLOTS3.forEach(([name, k], i) => {
+      const v = rec3.get(rd, C3.slots + 2 * k, 2);
+      eqRows[i].replaceChildren(el('td', { textContent: name }), el('td', { className: 'n', textContent: v === 0xFFFF ? '-' : String(v).padStart(4, '0') }),
+        el('td', { textContent: v === 0xFFFF ? '-' : items.get(v) || '?' }));
+    });
+    fill();
+    const list = el('select', { size: 18, style: 'width:100%;font-family:Consolas,monospace' }), filter = el('input', { type: 'text', placeholder: 'Filter' });
+    const fillList = () => {
+      list.replaceChildren();
+      for (const [n, name] of items) if (!filter.value || name.toLowerCase().includes(filter.value.toLowerCase()))
+        list.append(el('option', { value: n, textContent: `${String(n).padStart(4, '0')}  ${name}` }));
+    };
+    filter.oninput = fillList; fillList();
+    const setItem = () => {
+      if (slotSel < 0 || !list.value) { alert('Select an equipment slot and an item.'); return; }
+      rec3.set(rd, C3.slots + 2 * SLOTS3[slotSel][1], +list.value, 2); fill();
+    };
+    const clearItem = () => { if (slotSel >= 0) { rec3.set(rd, C3.slots + 2 * SLOTS3[slotSel][1], 0xFFFF, 2); fill(); } };
+    const equip = el('fieldset', {}, el('legend', { textContent: ' Equipment ' }), el('div', { style: 'display:flex;gap:10px' },
+      el('div', { style: 'max-height:430px;overflow:auto' }, eq),
+      el('div', { style: 'width:330px' }, items.size ? list : el('p', { className: 'muted',
+        textContent: "No item names: import ASE3's folder (menu: ASE / ASE3 data folder) for its Items.txt. Double-click a slot to enter an item number." }),
+        el('div', { style: 'display:flex;gap:6px;margin-top:4px' }, el('button', { textContent: 'Set item', onclick: setItem }),
+          el('button', { textContent: 'Clear item', onclick: clearItem }), filter))));
+    body.replaceChildren(el('div', { className: 'ed', style: 'grid-template-columns:150px 1fr' }, chars,
+      el('div', {}, el('div', { className: 'cols' }, stats, equip),
+        el('div', { className: 'cols' }, spellBox('Mage spells', MAGE3, C3.mage), spellBox('Cleric spells', CLERIC3, C3.cleric)),
+        el('p', { className: 'muted', textContent: 'Changes are kept per character until "Apply changes". Some items may crash the game; ' +
+          'back up your saves before editing.' }))));
+  },
+  async apply() {
+    const { kind, recs } = this.src;
+    if (kind === 'mem') {
+      // only the characters that were changed, so the game's own changes to the others stay
+      const changed = recs.filter(r => r.data.some((v, i) => v !== r.orig[i]));
+      for (const r of changed) { await Api.write(r.at + C3.from, r.data); r.orig = r.data.slice(); }
+      log(changed.length ? `Characters written to memory: ${changed.map(r => rec3.name(r.data)).join(', ')}` : 'Nothing changed');
+    } else {
+      const f = this.src.file.slice();
+      for (const r of recs) f.set(r.data, r.at + C3.from);
+      if (await Files.write(`SAVEGAME/ITEMS_${pad2(this.src.slot)}.BIN`, f)) {
+        this.src.file = f;
+        log(`Characters written to ITEMS_${pad2(this.src.slot)}.BIN`);
+      }
+    }
+  },
+};
+
+/* -------------------------------------------------------- log */
+
+const logLines = [];
+function log(text) {
+  logLines.push(`${new Date().toTimeString().slice(0, 8)}  ${text}`);
+  if (logLines.length > 500) logLines.shift();
+  const l = document.querySelector('#log');
+  if (l) { l.textContent = logLines.join('\n'); l.parentElement.scrollTop = 1e9; }
+}
+const LogWin = {
+  open() {
+    const d = Dlg.make('logwin', 'Debug log', 640), body = d.querySelector('.body');
+    body.style.height = '320px';
+    if (!body.querySelector('#log')) body.append(el('div', { id: 'log' }));
+    log('Log opened');
+  },
+};
+
+loop();
+</script>
+</body>
+</html>

@@ -1,3 +1,4 @@
 build/
 release/
 __pycache__/
+web/_test*
