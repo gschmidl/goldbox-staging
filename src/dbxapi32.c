@@ -16,6 +16,7 @@
  *
  * Settings: dbxapi32.ini next to the DLL, section [dbxapi]:
  *   port=0  (0: find the API port; else only this port)  cache_ms=40  log=0
+ *   trace=0 (1: log every read/write to dbxapi32.trace)
  */
 
 #define WIN32_LEAN_AND_MEAN
@@ -50,6 +51,9 @@ static char log_path[MAX_PATH];
 static int cfg_port;          /* 0 = find it */
 static DWORD cfg_cache_ms = 40;
 static int cfg_log = 0;
+static int cfg_trace = 0;      /* log every read/write to dbxapi32.trace */
+static char trace_path[MAX_PATH];
+static FILE *trace_file;
 
 static HINTERNET h_session, h_connect;
 static int conn_port, conn_v6; /* where h_connect points */
@@ -89,6 +93,25 @@ static void dbg(const char *fmt, ...)
 	fclose(f);
 }
 
+/* trace=1: one line per read/write of the emulated RAM, for working out
+ * which memory a tool uses: "<ms> R <offset> <len>", "<ms> W <offset> <hex>" */
+static void trace(char op, DWORD off, const void *data, DWORD len)
+{
+	if (!cfg_trace)
+		return;
+	if (!trace_file && !(trace_file = fopen(trace_path, "a")))
+		return;
+	fprintf(trace_file, "%lu %c %lx %lu", (unsigned long)GetTickCount(), op,
+	        (unsigned long)off, (unsigned long)len);
+	if (data) {
+		fputc(' ', trace_file);
+		for (DWORD i = 0; i < len; i++)
+			fprintf(trace_file, "%02x", ((const unsigned char *)data)[i]);
+	}
+	fputc('\n', trace_file);
+	fflush(trace_file);
+}
+
 static void load_config(HMODULE self)
 {
 	GetModuleFileNameA(self, ini_path, sizeof ini_path);
@@ -97,11 +120,14 @@ static void load_config(HMODULE self)
 		slash[1] = 0;
 	strcpy(log_path, ini_path);
 	strcat(log_path, "dbxapi32.log");
+	strcpy(trace_path, ini_path);
+	strcat(trace_path, "dbxapi32.trace");
 	strcat(ini_path, "dbxapi32.ini");
 
 	cfg_port = GetPrivateProfileIntA("dbxapi", "port", 0, ini_path);
 	cfg_cache_ms = GetPrivateProfileIntA("dbxapi", "cache_ms", 40, ini_path);
 	cfg_log = GetPrivateProfileIntA("dbxapi", "log", 0, ini_path);
+	cfg_trace = GetPrivateProfileIntA("dbxapi", "trace", 0, ini_path);
 
 	const char *env = getenv("DBXAPI_PORT");
 	if (env && *env)
@@ -574,6 +600,7 @@ BOOL WINAPI Shim_ReadProcessMemory(HANDLE process, LPCVOID address,
 		ok = TRUE;
 	} else if (in_window(addr, (DWORD)size)) {
 		DWORD off = addr - RAM_WINDOW, done = 0;
+		trace('R', off, NULL, (DWORD)size);
 		ok = TRUE;
 		while (done < size) {
 			DWORD pos = off + done;
@@ -618,6 +645,7 @@ BOOL WINAPI Shim_WriteProcessMemory(HANDLE process, LPVOID address,
 		ok = TRUE;
 	} else if (in_window(addr, (DWORD)size)) {
 		DWORD off = addr - RAM_WINDOW;
+		trace('W', off, buffer, (DWORD)size);
 		ok = api_write(off, buffer, (DWORD)size);
 		dbg("write 0x%lx (+%lu) -> %s", off, (unsigned long)size,
 		    ok ? "ok" : "FAILED");
