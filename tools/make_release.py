@@ -107,7 +107,7 @@ def main():
     if args.zip:
         top = os.path.splitext(os.path.basename(args.zip))[0]
         content = {
-            "README.md": "README.md", "patch.py": "patch.py",
+            "README.md": "README.md", "LICENSE": "LICENSE", "patch.py": "patch.py",
             "patches.json": "patches.json", "dbxapi32.dll": "build/dbxapi32.dll",
             "gbc_staging.conf": "conf/gbc_staging.conf",
             "source/build.sh": "build.sh",

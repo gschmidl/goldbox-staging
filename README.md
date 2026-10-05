@@ -216,3 +216,9 @@ The release zip carries the sources in `source/`.
   on copies, writes `patches.json` and builds the release zip.
 - `tools/gen_def.py` writes the DLL's export list `src/dbxapi32.def` from the
   tools' imports.
+
+## License
+
+MIT, see `LICENSE`. Gold Box Companion, The All-Seeing Eye and Ultimapper 5
+are Joonas Hirvonen's; none of their files are included here, only the bytes
+`patch.py` changes.
