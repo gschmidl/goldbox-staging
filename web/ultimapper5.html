@@ -22,24 +22,8 @@ button, select, input { background: #222; color: var(--text); border: 1px solid 
   padding: 2px 8px; font: inherit; }
 button { cursor: pointer; } button:hover { background: #333; }
 input[type=number] { width: 70px; }
-#hud { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)) 92px; padding: 6px 4px;
-  border-bottom: 2px solid #333; background: #000; }
+#hud { display: block; width: 100%; background: #000; border-bottom: 2px solid #333; }
 #hud.hidden { display: none; }
-.pc { padding: 0 8px; border-right: 1px solid #333; min-width: 0; }
-.pc .nm { background: var(--green); text-align: center; text-transform: uppercase; font-size: 12px;
-  padding: 1px 0; margin-bottom: 4px; overflow: hidden; white-space: nowrap; cursor: pointer; }
-.pc .nm.P { background: #5a7a10; } .pc .nm.S { background: #2c3c80; } .pc .nm.D { background: #444; }
-.pc .nm.C { background: #7a3c8a; } .pc .nm.R { background: #6a4a2a; }
-.pc .rw { display: flex; justify-content: space-between; gap: 4px; font-size: 11px; height: 16px; }
-.pc .rw span:first-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.pc .rw .e { color: var(--dim); }
-.pc .xp { height: 3px; background: #2a2a2a; margin: 6px 0 7px; } .pc .xp i { display: block; height: 100%; background: var(--xp); }
-.pc .hp { position: relative; height: 18px; background: #262626; text-align: center; font-size: 12px; }
-.pc .hp i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--green); }
-.pc .hp i.low { background: var(--red); }
-.pc .hp span { position: relative; line-height: 18px; }
-#side { text-align: center; font-size: 11px; line-height: 1.25; cursor: pointer; }
-#side b { display: block; font-size: 13px; font-weight: normal; margin-bottom: 4px; }
 #mapwrap { position: relative; flex: 1; overflow: auto; background: #000; }
 #map { display: block; margin: 0 auto; }
 #tip { position: fixed; pointer-events: none; background: #222e; border: 1px solid #555; padding: 2px 6px;
@@ -71,21 +55,26 @@ input[type=number] { width: 70px; }
 .list tr:hover td { background: #1d2a3d; }
 .n { text-align: right !important; }
 .list.spells { font: 11px Verdana, Tahoma, sans-serif; }
-.list.spells th { background: #333; color: #999; font-size: 10px; }
+.list.spells th { background: #222222; color: #888888; font-size: 10px; }
 .list.spells .c { text-align: center; }
-.list.spells tr.counts td { color: #ddd; padding: 6px 6px 8px; }
-.list.spells tr.known td { color: #f0f0f0; }
-.list.spells tr.na td { color: #5c5c5c; }
-.list.spells td.mix, .list.spells td.got { color: #3cb03c !important; }
-.list.spells td.miss { color: #c03030 !important; }
+.list.spells tr.counts td { color: #888888; padding: 6px 6px 8px; }
+.list.spells tr.known td { color: #AAAAAA; }
+.list.spells tr.na td { color: #444444; }
+.list.spells tr.sel td { background: #222266; }
+.list.spells tr.sel.known td { color: #CCCCCC; }
+.list.spells tr.sel.na td { color: #888888; }
+.list.spells td.mix, .list.spells td.got { color: #228822 !important; }
+.list.spells td.miss { color: #882222 !important; }
+.list.spells td.dash { color: #444444 !important; }
 .list.spells tr { cursor: pointer; }
 .inv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 24px; font: 11px Verdana, Tahoma, sans-serif;
-  color: #6a6a6a; padding: 4px 8px 10px; }
-.inv h4 { color: #ddd; font-size: 11px; font-weight: normal; margin: 16px 0 8px; }
+  color: #888888; padding: 4px 8px 10px; }
+.inv h4 { color: #888888; font-size: 11px; font-weight: normal; margin: 16px 0 8px; }
 .inv div > div { display: flex; gap: 8px; line-height: 18px; }
 .inv .n { width: 18px; text-align: right; }
-.inv .got { color: #ddd; }
-.inv .note { color: #555; }
+.inv .got { color: #CCCCCC; }
+.inv .dash { color: #444444; }
+.inv .note { color: #555555; }
 #log { font: 12px/1.3 Consolas, monospace; white-space: pre-wrap; }
 .grid2 { display: grid; grid-template-columns: auto auto; gap: 4px 10px; align-items: center; }
 .ed { display: grid; grid-template-columns: 220px 1fr; gap: 10px; }
@@ -106,7 +95,7 @@ a { color: #8ab4f8; }
     <span id="conn" class="chip">connecting</span>
     <button id="menuBtn" title="Menu (or right-click the map)">&#9776;</button>
   </div>
-  <div id="hud"></div>
+  <canvas id="hud" width="640" height="0"></canvas>
   <div id="mapwrap">
     <canvas id="map" width="512" height="512"></canvas>
     <div id="msg"></div>
@@ -135,6 +124,12 @@ const el = (tag, props = {}, ...kids) => {
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const hex = (n, w = 4) => n.toString(16).toUpperCase().padStart(w, '0');
 const pad3 = n => String(n).padStart(3, '0');
+const pad2 = n => String(n).padStart(2, '0');
+// Delphi's Round (ties to the even integer, the FPU's default), a font size in
+// points at 96 dpi as pixels, a clamp
+const round = v => { const f = Math.floor(v), d = v - f; return d > 0.5 ? f + 1 : d < 0.5 ? f : f % 2 ? f + 1 : f; };
+const pt = size => Math.round(size * 4 / 3);
+const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
 
 /* ---------------------------------------------------------------- API */
 
@@ -194,7 +189,7 @@ const DB = {
 const Settings = {
   v: { worldExplored: true, underworldExplored: false, townsExplored: true, dungeonsExplored: false,   // the original's defaults
        peerExplore: true, worldTitles: true, underworldTitles: false, npcNames: true, partyLocation: true,
-       autoLevelUp: false, qfInterval: 400, qfAim: true, debug: false, zoom: 0, hud: true },
+       autoLevelUp: false, qfInterval: 400, qfAim: true, debug: false, size: 0, hud: true },
   load() { try { Object.assign(this.v, JSON.parse(localStorage.getItem('um5.settings') || '{}')); } catch {} },
   save() { try { localStorage.setItem('um5.settings', JSON.stringify(this.v)); } catch {} },
 };
@@ -204,19 +199,19 @@ const Settings = {
 const DATA_FILES = ['TILES.16', 'BRIT.DAT', 'UNDER.DAT', 'TOWNE.DAT', 'DWELLING.DAT', 'CASTLE.DAT',
   'KEEP.DAT', 'DUNGEON.DAT', 'DATA.OVL', 'TOWNE.NPC', 'DWELLING.NPC', 'CASTLE.NPC', 'KEEP.NPC',
   'TOWNE.TLK', 'DWELLING.TLK', 'CASTLE.TLK', 'KEEP.TLK', 'LOOK2.DAT', 'SIGNS.DAT', 'BRIT.CBT', 'DUNGEON.CBT'];
-const SAVE_FILES = ['SAVED.GAM', 'SAVED.OOL', 'BRIT.OOL', 'UNDER.OOL'];
+const SAVE_FILES = ['BRIT.OOL', 'SAVED.GAM', 'SAVED.OOL', 'UNDER.OOL'];   // what the original backs up, with Explored.UM5
 const MANUALS = { manual: 'manual.pdf', ref: 'Ultima 5 reference card.pdf', lore: 'Ultima 5 The Book of Lore.pdf',
   spellbook: 'Ultima 5 spellbook.pdf', cluebook: 'Ultima 5 cluebook.pdf' };
 
 const Files = {
   data: {},          // name (upper case) -> Uint8Array
-  dirHandle: null,   // File System Access handle (Chromium), for backups
+  pdfs: new Set(),   // the manuals that were in the game folder
   async loadCached() {
     for (const n of DATA_FILES) {
       const b = await DB.get('files', n);
       if (b) this.data[n] = new Uint8Array(b);
     }
-    this.dirHandle = await DB.get('kv', 'dirHandle') || null;
+    for (const k of Object.keys(MANUALS)) if (await DB.get('files', 'PDF:' + k)) this.pdfs.add(k);
     return this.ok();
   },
   ok() { return ['TILES.16', 'BRIT.DAT', 'UNDER.DAT', 'TOWNE.DAT', 'DATA.OVL'].every(n => this.data[n]); },
@@ -224,7 +219,7 @@ const Files = {
   async importUrl(base) {
     if (!base.endsWith('/')) base += '/';
     const got = async name => {
-      for (const n of [name, name.toLowerCase()]) {
+      for (const n of [name, name.toLowerCase(), name[0] + name.slice(1).toLowerCase()]) {
         const r = await fetch(base + encodeURIComponent(n), { cache: 'no-store' });
         if (r.ok) return r.arrayBuffer();
       }
@@ -256,7 +251,7 @@ const Files = {
     }
     for (const [key, name] of Object.entries(MANUALS)) {
       const f = top.get(name.toUpperCase());
-      if (f) await DB.put('files', 'PDF:' + key, f);
+      if (f) { await DB.put('files', 'PDF:' + key, f); this.pdfs.add(key); }
     }
     this.saveSnapshot = {};
     for (const n of SAVE_FILES) { const f = top.get(n); if (f) this.saveSnapshot[n] = f; }
@@ -302,7 +297,7 @@ const SHORT = { 'Cloth Armour': 'Cloth', 'Leather Armour': 'Leather', 'Scale Mai
   'Plate Mail': 'Plate', 'Mystic Armour': 'Mystic Armr', 'Invisibility Ring': 'Invis. Ring',
   'Protection Ring': 'Prot. Ring', 'Regeneration Ring': 'Regen. Ring', 'Amulet of Turning': 'Amulet of Turn.',
   'Jewelled Shield': 'Jewel Shield', 'Jewelled Sword': 'Jewel Sword' };
-const SLOTS = ['Helm', 'Armour', 'Weapon', 'Shield', 'Ring', 'Amulet'];
+const SLOTS = ['Helmet', 'Armor', 'Weapon', 'Shield', 'Ring', 'Amulet'];   // the HUD's names for empty slots
 const CLASSES = { 0x41: 'Avatar', 0x42: 'Bard', 0x46: 'Fighter', 0x4D: 'Mage' };
 const STATUS = { 0x47: 'Good', 0x50: 'Poisoned', 0x43: 'Charmed', 0x53: 'Asleep', 0x44: 'Dead', 0x52: 'Rat',
   0x49: 'Invisible' };
@@ -408,18 +403,63 @@ const EXTRA_TITLES = {
 const WORLD_LOCS = [...Array(40).keys()].map(i => i + 1).filter(l => ![2, 19, 20, 21, 25, 40].includes(l));
 const UNDER_LOCS = [25, 33, 34, 35, 36, 37, 38, 39, 40];
 
-// the colours the original gives the large maps' tiles when a tile is only a
-// few pixels big (measured from its window); other tiles: the average of their
-// non-black pixels
-const MINIMAP = (() => {
-  const m = {}, set = (from, to, c) => { for (let t = from; t <= to; t++) m[t] = c; };
-  set(0x10, 0x1B, '#b40204'); set(0x1C, 0x1F, '#dcb604'); set(0x20, 0x2E, '#946e4c'); set(0x30, 0x37, '#044a04');
-  set(0x38, 0x3F, '#b40204'); set(0x60, 0x6F, '#0492fc');
-  return Object.assign(m, { 0x01: '#0426fc', 0x02: '#0492fc', 0x03: '#04b6fc', 0x04: '#046e6c', 0x05: '#046e04',
-    0x06: '#4c6e4c', 0x07: '#dcb604', 0x08: '#049204', 0x09: '#04b604', 0x0A: '#04da04', 0x0B: '#6c6e6c', 0x0C: '#949294',
-    0x0D: '#b4b6b4', 0x0E: '#6c6e6c', 0x0F: '#6c6e6c', 0x2F: '#dcb604', 0x47: '#b4b6b4', 0x5E: '#b40204', 0x5F: '#b40204',
-    0x6A: '#b40204', 0x6B: '#b40204', 0x8F: '#b40204', 0xA4: '#fcfefc', 0xD4: '#0426fc', 0xFF: '#000000' });
-})();
+// Ultimapper_5.exe's own tables (tools/gen_web_tables.py): the colour of each tile
+// on the large maps, which combat tiles can be walked on, the weapon and shield
+// pairs quickfight equips in order of preference, the HUD's item names and the
+// colours of its hit point and experience bars
+/*@U5_TABLES@*/
+const TILE_COLOURS = [
+  "#000000", "#0426FC", "#0492FC", "#04B6FC", "#046E6C", "#046E04", "#4C6E4C", "#DCB604", "#049204", "#04B604", "#04DA04", "#6C6E6C",
+  "#949294", "#B4B6B4", "#6C6E6C", "#6C6E6C", "#B40204", "#B40204", "#B40204", "#B40204", "#B40204", "#B40204", "#B40204", "#B40204",
+  "#B40204", "#B40204", "#000000", "#B40204", "#DCB604", "#000000", "#DCB604", "#DCB604", "#946E4C", "#946E4C", "#946E4C", "#946E4C",
+  "#946E4C", "#946E4C", "#946E4C", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#DCB604",
+  "#044A04", "#044A04", "#044A04", "#044A04", "#044A04", "#044A04", "#044A04", "#044A04", "#000000", "#B40204", "#B40204", "#B40204",
+  "#B40204", "#B40204", "#B40204", "#B40204", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#B4B6B4",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#B40204", "#B40204",
+  "#0492FC", "#0492FC", "#0492FC", "#0492FC", "#0492FC", "#0492FC", "#0492FC", "#0492FC", "#0492FC", "#0492FC", "#B40204", "#B40204",
+  "#0492FC", "#0492FC", "#0492FC", "#0492FC", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#B40204",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#FCFEFC", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#0426FC", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000", "#000000",
+  "#000000", "#000000", "#000000", "#000000"];
+const WALKABLE = Uint8Array.from('0000111111110011111111111101011111111110000011001111111101000010100011011100000000000000000000000000000000110000000000000000000000000011000010011111000000000000000000000011100000000000000010000000111111000000000000000000110000000000000000000000000001000000');
+const EQUIP_PREF = [
+  [38, 7], [38, 6], [38, 8], [38, 5], [38, 4], [38, 255], [34, 255], [41, 255], [25, 7],
+  [25, 6], [25, 8], [25, 5], [25, 4], [25, 255], [33, 255], [32, 255], [31, 255], [30, 7],
+  [30, 6], [30, 8], [30, 5], [30, 4], [30, 255], [24, 7], [24, 6], [24, 8], [24, 5],
+  [24, 4], [24, 255], [23, 7], [23, 6], [23, 8], [23, 5], [23, 4], [23, 20], [23, 16],
+  [23, 255], [18, 7], [18, 6], [18, 8], [18, 5], [18, 4], [18, 20], [18, 255], [16, 255]];
+const HUD_ITEMS = [
+  "Leather Helm", "Chain Coif", "Iron Helm", "Spiked Helm", "Small Shield", "Large Shield",
+  "Spiked Shield", "Magic Shield", "Jewelled Shield", "Cloth", "Leather", "Ring Mail",
+  "Scale", "Chain", "Plate", "Mystic Armor", "Dagger", "Sling",
+  "Club", "Flaming Oil", "Main Gauche", "Spear", "Throwing Axe", "Short Sword",
+  "Mace", "Morning Star", "Bow", "Arrows", "Crossbow", "Quarrels",
+  "Long Sword", "2h Hammer", "2h Axe", "2h Sword", "Halberd", "Sword of Chaos",
+  "Magic Bow", "Silver Sword", "Magic Axe", "Glass Sword", "Jeweled Sword", "Mystic Sword",
+  "Invisibility Ring", "Protection Ring", "Regeneration Ring", "Amulet of Turning", "Spiked Collar", "Ankh"];
+const HP_COLOURS = ["#660000", "#662200", "#666600", "#226600", "#006600"];
+const XP_COLOURS = ["#774400", "#774400", "#774400", "#774400", "#BB8800"];
+const XP_FULL_COLOURS = ["#774400", "#774400", "#774400", "#774400", "#774400"];
+/*@/U5_TABLES@*/
+const TILE_RGB = TILE_COLOURS.map(h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+// the hand-placed shifts of some world titles (tiles), and of the Compassion shrine's
+const TITLE_SHIFTS = { 5: [0, -2], 16: [3, 2], 23: [0, -3], 26: [3, 0], 28: [-8, 0], 37: [0, 3] };
+// the cell you stand on and its eight neighbours
+const DUNGEON_NEAR = [[0, 0], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
+// the original's messages instead of the map
+const CHARGEN_TEXT = 'CHARACTER GENERATION\n\nVIRTUE STAT BONUSES\n\nHonesty: Int +2\nCompassion: Dex +2\nValor: Str +2\n' +
+  'Justice: Dex +1, Int +1\nSacrifice: Dex +1, Str +1\nHonor: Str +1, Int +1\nSpirituality: Dex +1, Str +1, Int +1\nHumility: None';
+const NOT_PLAYING_TEXT = 'Game found in memory,\nbut character name does not match memory\n\n\nJOURNEY ONWARD\n\nor\n\nCREATE NEW CHARACTER';
 
 // Ultima V's LZW (*.16 files): 4-byte length, then 9..12-bit codes, 0x100 = reset, 0x101 = end
 function lzw(src) {
@@ -453,28 +493,8 @@ function lzw(src) {
 }
 
 const U5 = {
-  atlas: null, worldMap: null, underMap: null, smallMaps: {}, names: null,
-  reset() { this.atlas = this.worldMap = this.underMap = this.names = this.tileColours = null; this.smallMaps = {}; Render.dirty = true; },
-  // one colour per tile for small scales: the original's for the terrain, else
-  // the average of the tile's non-black pixels
-  colours() {
-    if (this.tileColours || !this.tiles()) return this.tileColours;
-    const d = this.atlas.getContext('2d').getImageData(0, 0, 512, 256).data, out = new Uint8Array(512 * 3);
-    for (let t = 0; t < 512; t++) {
-      if (MINIMAP[t]) {
-        for (let k = 0; k < 3; k++) out[t * 3 + k] = parseInt(MINIMAP[t].slice(1 + 2 * k, 3 + 2 * k), 16);
-        continue;
-      }
-      const tx = (t % 32) * 16, ty = (t >> 5) * 16, sum = [0, 0, 0];
-      let n = 0;
-      for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
-        const p = ((ty + y) * 512 + tx + x) * 4;
-        if (d[p] | d[p + 1] | d[p + 2]) { sum[0] += d[p]; sum[1] += d[p + 1]; sum[2] += d[p + 2]; n++; }
-      }
-      if (n) for (let k = 0; k < 3; k++) out[t * 3 + k] = sum[k] / n;
-    }
-    return this.tileColours = out;
-  },
+  atlas: null, atlasT: null, worldMap: null, underMap: null, smallMaps: {}, names: null, monsters: null,
+  reset() { this.atlas = this.atlasT = this.worldMap = this.underMap = this.names = this.monsters = null; this.smallMaps = {}; },
   tiles() {
     if (this.atlas || !Files.data['TILES.16']) return this.atlas;
     const raw = lzw(Files.data['TILES.16']);
@@ -493,6 +513,36 @@ const U5 = {
     }
     g.putImageData(img, 0, 0);
     return this.atlas = c;
+  },
+  // the tiles with black transparent, for what the original draws with its transparent flag
+  tilesT() {
+    if (this.atlasT || !this.tiles()) return this.atlasT;
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 256;
+    const g = c.getContext('2d');
+    g.drawImage(this.atlas, 0, 0);
+    const img = g.getImageData(0, 0, 512, 256), d = img.data;
+    for (let p = 0; p < d.length; p += 4) if (!(d[p] | d[p + 1] | d[p + 2])) d[p + 3] = 0;
+    g.putImageData(img, 0, 0);
+    return this.atlasT = c;
+  },
+  // the 48 monster names in DATA.OVL (from 32B, one after the other), made singular
+  // and lower-cased after the first letter of each word, as the original lists them
+  monsterName(tile) {
+    if (!this.monsters) {
+      const ovl = Files.data['DATA.OVL'], list = [];
+      let p = 0x32B;
+      for (let i = 0; ovl && i < 48; i++) {
+        let n = '';
+        for (let k = 0; k < 20 && ovl[p + k]; k++) n += String.fromCharCode(ovl[p + k]);
+        n = [...n].map((ch, k) => k === 0 || n[k - 1] === ' ' ? ch : ch.toLowerCase()).join('');
+        list.push(n === 'Headlesses' ? 'Headless' : n.endsWith('s') ? n.slice(0, -1) : n);
+        while (ovl[p]) p++;
+        p++;
+      }
+      this.monsters = list;
+    }
+    return this.monsters[tile] || '';
   },
   large(under) {
     const key = under ? 'underMap' : 'worldMap';
@@ -528,10 +578,11 @@ const U5 = {
     const ovl = Files.data['DATA.OVL'];
     return ovl ? [ovl[0x1E9A + loc - 1], ovl[0x1EC2 + loc - 1]] : null;
   },
-  // NPC names per small-map location and NPC slot, from *.NPC dialog numbers and *.TLK scripts
-  npcName(loc, slot) {
+  // the name of the NPC with dialogue number n at a small-map location (merchants
+  // have 81-88 instead of a script), from the *.NPC and *.TLK files
+  npcName(loc, n) {
     if (!this.names) this.names = buildNpcNames();
-    return this.names[loc]?.[slot] || '';
+    return n >= 0x81 && n <= 0x88 ? MERCHANTS[n - 0x81] : this.names[loc]?.[n] || '';
   },
 };
 
@@ -547,10 +598,10 @@ function buildNpcNames() {
     if (!npc || !tlk) continue;
     const talk = parseTlkNames(tlk);
     locs.forEach((loc, i) => {
-      const rec = npc.subarray(i * 0x240, (i + 1) * 0x240), list = [];
+      const rec = npc.subarray(i * 0x240, (i + 1) * 0x240), list = {};
       for (let s = 0; s < 32; s++) {
         const dlg = rec[0x220 + s];
-        list[s] = dlg >= 0x81 && dlg <= 0x88 ? MERCHANTS[dlg - 0x81] : talk[dlg] || '';
+        if (dlg >= 1 && dlg <= 0x80) list[dlg] = talk[dlg] || '';
       }
       names[loc] = list;
     });
@@ -655,14 +706,17 @@ function parseTlkNames(t) {
 /* ------------------------------------------------------- game state */
 
 const DS_COPYRIGHT = 0x18, SAVE = 0x55B6, VIEW = 0xAB12, MAPBUF = 0x6618, SAVE_LEN = 4192;
-// in combat (location FF): the 11x11 combat map (rows of 32 bytes) and 8-byte
-// records of the combatants (party 0-5, monsters from 6; a monster's HP first)
+// in combat (location FF): the 11x11 combat map (rows of 32 bytes) and the 32
+// 8-byte combatant records (see Game.combat)
 const COMBAT_MAP = 0xAD24, COMBAT_UNITS = 0xBA24;
 const COPYRIGHT = 'MS Run-Time Library - Copyright (c) 1988, Microsoft Corp';
 
 const Game = {
-  base: null, save: null, view: null, mapbuf: null, cmap: null, cunits: null, info: null, lastOk: 0,
+  base: null, save: null, view: null, mapbuf: null, cmap: null, cunits: null, info: null, lastOk: 0, tick: 0,
+  wasDead: false, charmedSlots: new Set(), lastChunk: [0, 0],
   get loc() { return this.save[0x2ED]; },
+  get facing() { return this.save[0x105D]; },   // in dungeons: 0 north, 1 east, 2 south, 3 west
+  get partySize() { return this.save[0x2B5]; },
   get z() { const z = this.save[0x2EF]; return z > 127 ? z - 256 : z; },
   get x() { return this.save[0x2F0]; },   // in combat: the combatant whose turn it is
   get y() { return this.save[0x2F1]; },
@@ -678,18 +732,87 @@ const Game = {
     const a = this.area();
     return a === 'world' ? 'w' : a === 'under' ? 'u' : a === 'combat' ? 'c' : `${a[0]}${this.loc}_${this.z}`;
   },
-  // the combatants: save's unit table (party first), HP from the character records or DS:BA24
-  combatants() {
-    const party = this.party(), units = this.save.subarray(0x6B4, 0x6B4 + 256), list = [];
-    for (let i = 0; i < 32; i++) {
-      const u = units.subarray(i * 8, i * 8 + 8);
-      if (!u[0] && !u[1]) continue;
-      const pc = i < party.length ? party[i] : null, rec = pc ? i : i - party.length + 6;
-      if (rec * 8 >= this.cunits.length) continue;
-      list.push({ i, tile: 0x100 + u[0], x: u[2], y: u[3], pc, hp: pc ? pc.hp : this.cunits[rec * 8],
-        active: i === this.save[0x2F8] });
+  // map unit i of the save (6B4, 32 x 8 bytes): tile - 100, a second tile, x, y, floor; unit 0
+  // is the party (tile 1C, the Avatar)
+  unit(i) {
+    const o = 0x6B4 + i * 8, s = this.save;
+    return { tile: s[o], tile2: s[o + 1], x: s[o + 2], y: s[o + 3], z: s[o + 4] };
+  },
+  // the name in a character record (up to 12 characters, as the original reads it)
+  recordName(o, n = 12) {
+    let name = '';
+    for (let k = 0; k < n && this.save[o + k]; k++) name += String.fromCharCode(this.save[o + k]);
+    return name;
+  },
+  // the name of map unit i: the save's NPC table (9B8, 32 x 16 bytes) links a unit (byte C)
+  // to its dialogue number (byte A)
+  unitName(i) {
+    const s = this.save, loc = this.loc;
+    if (loc < 1 || loc > 32) return '';
+    for (let k = 0; k < 32; k++) {
+      const o = 0x9B8 + k * 16;
+      if (s[o + 0xC] === i) return U5.npcName(loc, s[o + 0xA]);
     }
-    return list;
+    return '';
+  },
+  // everyone in the party at 0 hit points
+  partyDead() {
+    for (let i = 0; i < 16; i++) {
+      const o = 2 + i * 32;
+      if (this.save[o + 0x1F] === 0 && (this.save[o + 0x10] | this.save[o + 0x11] << 8) !== 0) return false;
+    }
+    return true;
+  },
+  /* The combat as the original reads it: the 11x11 map at DS:AD24 (rows of 32) and the
+   * 32 8-byte combatant records at DS:BA24: hit points (monsters), present, flags,
+   * party record / monster tile, -, -, x, y.  Flag 08 = asleep, 10 = invisible,
+   * 80 and 01: one of them = friendly, both = charmed, neither = hostile.  Objects
+   * of the save's unit table (tiles 1-13, 1E, 1F) lie on the map too.  Cells know
+   * whether they can be walked on and who stands there. */
+  combat() {
+    if (this._combat && this._combat.tick === this.tick) return this._combat;
+    const cells = [];
+    for (let y = 0; y < 11; y++) for (let x = 0; x < 11; x++) {
+      const t = this.cmap[y * 32 + x];
+      cells.push({ tile: t, walk: WALKABLE[t], unit: -1, hp: 0, friendly: false, name: '', dist: 0 });
+    }
+    for (let i = 0; i < 32; i++) {
+      const u = this.unit(i);
+      if (u.x > 10 || u.y > 10) continue;
+      const c = cells[u.y * 11 + u.x];
+      if (u.tile >= 1 && u.tile <= 13) { c.walk = 0; c.tile = 0x100 + u.tile; }
+      else if (u.tile === 0x1E) c.tile = 0x11E;
+      else if (u.tile === 0x1F) c.tile = 0x11F;
+    }
+    const party = this.partySize, units = [], charmed = new Set();
+    let hostiles = 0;
+    for (let i = 0; i < 32; i++) {
+      const r = this.cunits.subarray(i * 8, i * 8 + 8);
+      if (!r[1]) { units.push(null); continue; }
+      const u = { i, tile: r[3], x: r[6], y: r[7], hp: 0, name: '', pc: -1, asleep: false, hidden: false, charmed: false, friendly: false };
+      if (i > party - 1) { u.hp = r[0]; if (u.tile < 0x30) u.name = U5.monsterName(u.tile); }
+      else {
+        const o = 2 + r[3] * 32;
+        u.hp = this.save[o + 0x10] | this.save[o + 0x11] << 8;
+        u.name = this.recordName(o);
+        u.pc = r[3];
+      }
+      if (u.x < 11 && u.y < 11 && u.hp > 0) {
+        const c = cells[u.y * 11 + u.x], f = r[2];
+        c.unit = i; c.walk = 0; c.hp = u.hp; c.name = u.name;
+        if (f & 8) u.asleep = true;
+        if (f & 0x10 && !(f & 0x80) && !(f & 1)) u.hidden = true;
+        if (f & 0x80 && f & 1) { u.charmed = true; if (i < 6 && r[3] < 6) charmed.add(r[3]); hostiles++; }
+        else if (!(f & 0x80) && !(f & 1)) hostiles++;
+        else { u.friendly = true; c.friendly = true; }
+      }
+      units.push(u);
+    }
+    const u0 = this.unit(0);
+    // the game shows the combat screen without a fight going on: the camp, or 233,233
+    const over = (u0.tile === 0x6C && u0.x === 5 && u0.y === 6) || (this.x === 0xE9 && this.y === 0xE9);
+    this.charmedSlots = charmed;
+    return this._combat = { tick: this.tick, cells, units, hostiles, over, active: this.save[0x2F8] };
   },
   u16(o) { return this.save[o] | this.save[o + 1] << 8; },
   party() {
@@ -727,7 +850,7 @@ const Game = {
     const [save, view, mapbuf, cmap, cunits] = await Promise.all([Api.read(this.base + SAVE, SAVE_LEN),
       Api.read(this.base + VIEW, 352), Api.read(this.base + MAPBUF - 5, 1029),
       Api.read(this.base + COMBAT_MAP, 352), Api.read(this.base + COMBAT_UNITS, 256)]);
-    return { save, view, mapbuf: mapbuf.subarray(5), ddir: mapbuf[0], cmap, cunits };   // DS:6613: facing in dungeons
+    return { save, view, mapbuf: mapbuf.subarray(5), cmap, cunits };
   },
   async writeSave(off, bytes) {
     await Api.write(this.base + SAVE + off, Uint8Array.from(bytes));
@@ -761,12 +884,25 @@ const Explored = {
     }
     return this.maps[key];
   },
+  // marks one cell; nothing wraps around the edges, like the original
   mark(key, x, y) {
-    const n = this.size(key), m = this.get(key);
-    x = ((x % n) + n) % n; y = ((y % n) + n) % n;
-    if (!m[y * n + x]) { m[y * n + x] = 1; this.dirty.add(key); this.gen++; }
+    const n = this.size(key);
+    if (x < 0 || y < 0 || x >= n || y >= n) return false;
+    const m = this.get(key);
+    if (m[y * n + x]) return false;
+    m[y * n + x] = 1; this.dirty.add(key); this.gen++;
+    return true;
   },
   fill(key, v) { this.get(key).fill(v); this.dirty.add(key); this.gen++; Render.draw(); },
+  // what a gem or an In Quas Wis shows: on the large maps the 2x2 chunks the game
+  // has in memory around the party, elsewhere the whole floor
+  peer() {
+    const area = Game.area(), key = Game.areaKey();
+    if (area === 'world' || area === 'under') {
+      const x0 = chunkOrigin(Game.x), y0 = chunkOrigin(Game.y);
+      for (let y = y0; y < y0 + 32; y++) for (let x = x0; x < x0 + 32; x++) this.mark(key, x, y);
+    } else if (area !== 'combat') this.fill(key, 1);
+  },
   async clearAll() {
     for (const k of await DB.keys('kv')) if (String(k).startsWith('exp:')) await DB.del('kv', k);
     this.maps = {}; this.gen++; Render.draw();
@@ -780,91 +916,188 @@ const Explored = {
     for (const k of this.dirty) DB.put('kv', 'exp:' + k, this.maps[k].buffer.slice(0));
     this.dirty.clear();
   },
+  // everything explored in the original's Explored.UM5 layout: world and underworld
+  // (256 x 256 each), the small maps (32 places x 5 floors x 32 x 32), the dungeons
+  async file() {
+    this.flush();
+    const out = new Uint8Array(0x20000 + 0x28000 + 0x1000);
+    for (const k of await DB.keys('kv')) {
+      const key = String(k);
+      if (!key.startsWith('exp:')) continue;
+      const m = new Uint8Array(await DB.get('kv', key)), id = key.slice(4), p = id.match(/^([sd])(\d+)_(-?\d+)$/);
+      const off = id === 'w' ? 0 : id === 'u' ? 0x10000 : !p ? -1
+        : p[1] === 's' ? 0x20000 + (+p[2] - 1) * 0x1400 + (+p[3] + 1) * 0x400 : 0x48000 + (+p[2] - 33) * 0x200 + +p[3] * 0x40;
+      if (off >= 0 && off + m.length <= out.length) out.set(m, off);
+    }
+    return out;
+  },
 };
 setInterval(() => Explored.flush(), 3000);
+// the origin of the 2x2 chunks around a position, as the game and the original compute it
+const chunkOrigin = v => clamp(Math.trunc((v - 5) / 16) * 16, 0, 0xE0);
 
+// the small-map cells in view this tick (what units are drawn on)
+const Visible = { cells: new Uint8Array(32 * 32) };
+
+/* What the original marks as explored each tick: on the large maps the 11x11 cells around
+ * the party; in a small map the view window's cells that aren't FF, if the view agrees
+ * with the map in memory (it lags behind on a change of place); in a dungeon the cell and
+ * its neighbours.  Nothing wraps, and nothing is marked while the area's "explored"
+ * setting shows everything anyway. */
 function markVisible() {
-  const key = Game.areaKey(), area = Game.area();
+  const area = Game.area(), key = Game.areaKey(), S = Settings.v, x = Game.x, y = Game.y;
   if (area === 'combat') return;
-  if (area === 'dungeon') {   // first-person view: the cell you stand on and its neighbours
-    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) Explored.mark(key, Game.x + dx, Game.y + dy);
+  if (area === 'world' || area === 'under') {
+    if (area === 'world' ? S.worldExplored : S.underworldExplored) return;
+    for (let dy = -5; dy <= 5; dy++) for (let dx = -5; dx <= 5; dx++) Explored.mark(key, x + dx, y + dy);
     return;
   }
-  const v = Game.view;
-  for (let r = 0; r < 11; r++) for (let c = 0; c < 11; c++)
-    if (v[r * 32 + c] !== 0xFF) Explored.mark(key, Game.x - 5 + c, Game.y - 5 + r);
+  if (area === 'dungeon') {
+    if (S.dungeonsExplored) return;
+    for (const [dx, dy] of DUNGEON_NEAR) Explored.mark(key, x + dx, y + dy);
+    return;
+  }
+  Visible.cells.fill(0);
+  if (x < 32 && y < 32) Visible.cells[y * 32 + x] = 1;
+  if (S.townsExplored) return;
+  const v = Game.view, m = Game.mapbuf;
+  for (let r = 0; r < 11; r++) for (let c = 0; c < 11; c++) {
+    const mx = x - 5 + c, my = y - 5 + r, t = v[r * 32 + c];
+    if (mx < 0 || my < 0 || mx >= 32 || my >= 32 || t === 0 || t === 0xFF) continue;
+    if (m[my * 32 + mx] !== t) return;
+  }
+  for (let r = 0; r < 11; r++) for (let c = 0; c < 11; c++) {
+    const mx = x - 5 + c, my = y - 5 + r;
+    if (mx < 0 || my < 0 || mx >= 32 || my >= 32 || v[r * 32 + c] === 0xFF) continue;
+    Visible.cells[my * 32 + mx] = 1;
+    Explored.mark(key, mx, my);
+  }
 }
 
 /* ------------------------------------------------------------ HUD */
 
+/* The HUD as the original paints it: as wide as the game window, 11 units high (a unit
+ * is a fiftieth of the width), six columns of a character each - name in a box coloured
+ * by status, equipment with class, level and stats on the right, magic points, the
+ * experience bar, the hit point bar - and the clock with keys, skull keys, torches and
+ * gems on the right.  A click on that part opens the spell list, a right click the
+ * inventory. */
 const Hud = {
-  last: '',
+  canvas: $('#hud'), last: '', side: null,
   draw() {
-    const box = $('#hud');
-    box.classList.toggle('hidden', !Settings.v.hud);
-    if (!Game.save) { box.innerHTML = ''; this.last = ''; return; }
-    const party = Game.party(), s = Game.save;
-    const sig = JSON.stringify([party, s[0x2D9], s[0x2DB], s[0x206], s[0x20B], s[0x208], s[0x207]]);
+    const c = this.canvas, s = Game.save, S = Settings.v;
+    c.classList.toggle('hidden', !S.hud);
+    if (!s || !S.hud) { this.last = ''; return; }
+    const W = $('#mapwrap').clientWidth || 640, u = round(W / 50), H = u * 11;
+    const sig = [W, ...s.subarray(2, 0x202), s[0x2D9], s[0x2DB], s[0x206], s[0x20B], s[0x208], s[0x207], ...Game.charmedSlots].join();
     if (sig === this.last) return;
     this.last = sig;
-    box.innerHTML = '';
-    for (let i = 0; i < 6; i++) {
-      const p = party[i], col = el('div', { className: 'pc' });
-      if (p) {
-        const st = String.fromCharCode(p.status);
-        col.append(el('div', { className: 'nm ' + st, textContent: p.name, title: STATUS[p.status] || st,
-          onclick: () => Editor.open(p.index) }));
-        const right = [`${String.fromCharCode(p.cls)} ${p.level}`, p.str, p.dex, p.int, '', p.mp];
-        p.eq.forEach((e, k) => {
-          const name = e === 0xFF ? SLOTS[k] : (SHORT[ITEMS[e]] || ITEMS[e] || '?');
-          col.append(el('div', { className: 'rw' }, el('span', { className: e === 0xFF ? 'e' : '', textContent: name }),
-            el('span', { textContent: right[k] })));
-        });
-        const next = LEVEL_XP[Math.min(p.level, 7)], prev = LEVEL_XP[Math.max(p.level - 1, 0)];
-        const frac = p.level >= 8 ? 1 : Math.max(0, Math.min(1, (p.xp - prev) / (next - prev)));
-        col.append(el('div', { className: 'xp', title: `${p.xp} XP` + (p.level < 8 ? `, ${next} for level ${p.level + 1}` : '') },
-          el('i', { style: `width:${frac * 100}%` })));
-        const hpf = p.maxhp ? Math.min(1, p.hp / p.maxhp) : 0;
-        col.append(el('div', { className: 'hp' }, el('i', { className: hpf < 0.5 ? 'low' : '', style: `width:${hpf * 100}%` }),
-          el('span', { textContent: `${p.hp} / ${p.maxhp}` })));
-      }
-      box.append(col);
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    const g = c.getContext('2d');
+    g.fillStyle = '#000000'; g.fillRect(0, 0, W, H);
+    const col = round((W - 6 * u + round(u * 0.5) - 5 * u) / 6);
+    g.strokeStyle = '#444444'; g.lineWidth = 1;
+    for (let k = 1; k <= 6; k++) {
+      const x = k * (col + u) + 0.5;
+      g.beginPath(); g.moveTo(x, round(u / 2)); g.lineTo(x, H - round(u / 2)); g.stroke();
     }
-    const side = el('div', { id: 'side', title: 'Click: spells, right-click: inventory' });
-    side.append(el('b', { textContent: `${String(s[0x2D9]).padStart(2, '0')}:${String(s[0x2DB]).padStart(2, '0')}` }));
-    for (const [o, n] of [[0x206, 'Keys'], [0x20B, 'Skull keys'], [0x208, 'Torches'], [0x207, 'Gems']])
-      side.append(el('div', { textContent: n }), el('div', { textContent: s[o] }));
-    side.onclick = () => Lists.open('spells');
-    side.oncontextmenu = e => { e.preventDefault(); Lists.open('inventory'); };
-    box.append(side);
+    const font = size => { g.font = `${pt(size)}px Verdana`; };
+    const text = (t, x, y, colour, align = 'left') => {
+      g.fillStyle = colour; g.textAlign = align; g.textBaseline = 'top'; g.fillText(t, x, y); g.textAlign = 'left';
+    };
+    const centred = (t, x, y, w, h, colour) => {
+      g.fillStyle = colour; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(t, x + w / 2, y + h / 2);
+      g.textAlign = 'left'; g.textBaseline = 'top';
+    };
+    let cx = round(u * 0.5);
+    for (let k = 0; k < 6; k++, cx += col + u) {
+      const o = 2 + k * 32;
+      if (s[o + 0x1F] !== 0) continue;
+      let y = H - round(u * 1.75);
+      const hp = s[o + 0x10] | s[o + 0x11] << 8, max = s[o + 0x12] | s[o + 0x13] << 8, st = s[o + 0x0B], level = s[o + 0x16];
+      this.bar(g, cx, y, col, u, st === 0x44 ? 'D E A D' : null, HP_COLOURS, max, hp);
+      y -= round(u * 0.75);
+      if (level >= 1 && level <= 7) {
+        const xp = s[o + 0x14] | s[o + 0x15] << 8;
+        this.bar(g, cx, y, col, round(u * 0.2), '', XP_COLOURS, LEVEL_XP[level] - LEVEL_XP[level - 1], xp - LEVEL_XP[level - 1]);
+      } else this.bar(g, cx, y, col, round(u * 0.2), '', XP_FULL_COLOURS, 1, 1);
+      y -= round(u * 1.25);
+      font(round(u * 0.5));
+      text(String(s[o + 0x0F]), cx + col, y, '#CCCCCC', 'right');
+      font(round(u * 0.4));
+      for (let slot = 0x1E; slot >= 0x19; slot--, y -= u) {
+        const it = s[o + slot];
+        text(it === 0xFF ? SLOTS[slot - 0x19] : HUD_ITEMS[it] || '-', cx, y, it === 0xFF ? '#333333' : '#999999');
+      }
+      font(round(u * 0.5));
+      let ry = y + u;
+      text(String.fromCharCode(s[o + 0x0A]) + ' ' + level, cx + col, ry, '#999999', 'right');
+      ry += round(u * 1.25);
+      for (let a = 0; a < 3; a++, ry += u) text(String(s[o + 0x0C + a]), cx + col, ry, '#999999', 'right');
+      y -= round(u * 1.25);
+      g.fillStyle = Game.charmedSlots.has(k) ? '#660066' : st === 0x44 ? '#1A1A1A' : st === 0x50 ? '#660000' : st === 0x53 ? '#666600' : '#006600';
+      g.fillRect(cx, y, col, u);
+      centred(Game.recordName(o).trim(), cx, y, col, u, '#EEEEEE');
+    }
+    const sx = 6 * (col + u), sw = round(u * 4.5);
+    this.side = [sx - u, 0, W, H];
+    let y = round(u * 0.75);
+    font(round(u * 0.5));
+    centred(`${pad2(s[0x2D9])}:${pad2(s[0x2DB])}`, sx, y, sw, u, '#EEEEEE');
+    const fh = pt(round(u * 0.5));
+    y += round(fh * 2.5);
+    for (const [label, off] of [['Keys', 0x206], ['Skull keys', 0x20B], ['Torches', 0x208], ['Gems', 0x207]]) {
+      centred(label, sx, y, sw, fh, '#999999'); y += round(fh * 1.25);
+      centred(String(s[off]), sx, y, sw, fh, '#EEEEEE'); y += round(fh * 1.75);
+    }
+    g.strokeStyle = '#444444'; g.strokeRect(0.5, 0.5, W - 1, H - 1);
+  },
+  // a bar: dark background, the part filled in one of five colours by the fraction,
+  // the text in the middle ("value / max" when none is given, nothing for '')
+  bar(g, x, y, w, h, label, colours, max, value) {
+    g.fillStyle = '#191919'; g.fillRect(x, y, w, h);
+    if (max > 0) {
+      const fill = Math.min(w, Math.trunc(w * value / max)), idx = Math.min(4, Math.trunc(value * (4 / max)));
+      if (idx >= 0) { g.fillStyle = colours[idx]; g.fillRect(x, y, fill, h); }
+    }
+    if (label === null) label = `${value} / ${max}`;
+    if (!label) return;
+    g.font = `${pt(round(h * 0.5))}px Verdana`; g.fillStyle = '#EEEEEE'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(label, x + w / 2, y + h / 2);
+    g.textAlign = 'left'; g.textBaseline = 'top';
   },
 };
+Hud.canvas.addEventListener('mousedown', ev => {
+  const r = Hud.canvas.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, b = Hud.side;
+  if (!Game.save || !b || x < b[0] || y < b[1] || x > b[2] || y > b[3]) return;
+  Lists.open(ev.button === 0 ? 'spells' : 'inventory');
+});
+Hud.canvas.addEventListener('contextmenu', ev => ev.preventDefault());
 
 /* ------------------------------------------------------------ map
- * The map is drawn from a cached full-size image of the area (16 px per
- * tile) and a mask of the unexplored cells; units, titles and the cursor are
- * drawn on top each time. */
+ * Drawn the way the original draws its map window (a square, 512 to 1600 pixels
+ * there): the large maps as one coloured pixel per tile stretched to the window,
+ * small maps and combat from 16-pixel tiles, dungeons from a 128-pixel drawing at a
+ * whole-number scale.  Texts are Verdana, like its bitmap's font. */
 
-// dungeon cells as the original draws them: walls with tile 78 (79 the
-// second kind), corridors #333, ladders tile 200 (up) / 201 (down); the rest
-// marked on the corridor colour
-const DUNGEON_CELL = { 0: ['#333', ''], 1: ['#333', '', 200], 2: ['#333', '', 201], 3: ['#333', '', 200, 201],
-  4: ['#333', '$'], 5: ['#24425e', 'F'], 6: ['#333', 'T'], 7: ['#333', '$'], 8: ['#4a2c4a', '#'],
-  9: ['#333', ''], 10: ['#333', 'R'], 11: ['#000', '', 78], 12: ['#000', '', 79], 13: ['#000', 's', 78],
-  14: ['#7a5a2a', 'D'], 15: ['#2e4a2e', 'R'] };
+// the dungeon cell types the original draws with tiles (over #333333)
+const DUNGEON_TILES = { 1: [200], 2: [201], 3: [200, 201], 4: [257], 5: [216], 7: [257], 11: [78], 12: [78], 13: [78],
+  14: [184], 15: [184] };
 const DUNGEON_INFO = { 0: 'corridor', 1: 'ladder up', 2: 'ladder down', 3: 'ladders up and down', 4: 'chest',
   5: 'fountain', 6: 'trap', 7: 'open chest', 8: 'magic field', 10: 'room', 11: 'wall', 12: 'wall',
   13: 'secret door', 14: 'door', 15: 'room' };
+// half as bright, the original's frame colour for a combatant's square
+const halfBright = hex => '#' + [1, 3, 5].map(i => Math.min(255, round(parseInt(hex.slice(i, i + 2), 16) * 0.5)).toString(16).padStart(2, '0')).join('');
 
 const Render = {
-  dirty: true, expDirty: true, mouse: null, mouseCell: null, lens: false,
-  canvas: $('#map'),
-  base: null, baseKey: '', small: null, smallKey: '', mask: null, maskKey: '', maskGen: 0,
-  tileSize(view) {
-    const wrap = $('#mapwrap'), z = Settings.v.zoom;
-    if (z > 0) return z;
-    const fit = Math.min(wrap.clientWidth, wrap.clientHeight) / view;
-    return view > 32 ? Math.max(1, Math.min(16, fit)) : Math.max(4, Math.min(view < 32 ? 96 : 40, Math.floor(fit)));
+  mouse: null, mouseCell: null, lens: false, canvas: $('#map'), dungeonBox: null,
+  base: null, baseKey: '', small: null, smallKey: '', mask: null, maskKey: '',
+  work: document.createElement('canvas'), dungeon: document.createElement('canvas'),
+  // the map window's size: the setting (512 to 1600), or what fits the window
+  size() {
+    const wrap = $('#mapwrap'), z = Settings.v.size;
+    return z > 0 ? z : Math.max(64, Math.min(wrap.clientWidth, wrap.clientHeight));
   },
   current() {
     if (!Game.save) return null;
@@ -873,56 +1106,50 @@ const Render = {
       const m = U5.large(area === 'under');
       return m && { area, n: 256, tiles: m, key: Game.areaKey() };
     }
-    if (area === 'dungeon') {
-      const d = U5.dungeon(loc, z);
-      return d && { area, n: 8, cells: d, key: Game.areaKey() };
+    if (area === 'dungeon') {   // the dungeon's levels are in the save (3B4, 64 bytes a level)
+      const o = 0x3B4 + (z & 7) * 64;
+      return { area, n: 8, cells: Game.save.subarray(o, o + 64), key: Game.areaKey() };
     }
-    if (area === 'combat') {   // the combat map, 11 x 11 out of rows of 32
-      const t = new Uint8Array(121);
-      for (let y = 0; y < 11; y++) t.set(Game.cmap.subarray(y * 32, y * 32 + 11), y * 11);
-      return { area, n: 11, tiles: t, key: 'c' };
+    if (area === 'combat') {
+      const cb = Game.combat();
+      return { area, n: 11, tiles: cb.cells.map(c => c.tile), combat: cb, key: 'c' };
     }
-    if (!U5.small(loc, z)) return null;
+    if (loc < 1 || loc > 32) return null;
     return { area, n: 32, tiles: Game.mapbuf, key: Game.areaKey() };   // the floor as the game has it now
   },
+  // Delphi's FrameRect: a one pixel line just inside the rectangle
+  frame(g, l, t, r, b) { if (r > l && b > t) g.strokeRect(l + 0.5, t + 0.5, r - l - 1, b - t - 1); },
+  tile(g, t, x, y, transparent) {
+    const a = transparent ? U5.tilesT() : U5.tiles();
+    if (a) g.drawImage(a, (t % 32) * 16, (t >> 5) * 16, 16, 16, x, y, 16, 16);
+  },
+  textHeight(g) {
+    const m = g.measureText('AjM');
+    return Math.ceil((m.fontBoundingBoxAscent || 0) + (m.fontBoundingBoxDescent || 0)) || Math.round(parseInt(g.font) * 1.2);
+  },
+  // the area at 16 pixels a tile
   baseImage(cur) {
-    const key = cur.key + ':' + (cur.n < 256 && cur.tiles ? cur.tiles.join(',') : '');
+    const key = cur.key + ':' + cur.tiles.join(',');
     if (this.baseKey === key) return this.base;
-    const atlas = U5.tiles(), n = cur.n, c = document.createElement('canvas');
+    const n = cur.n, c = document.createElement('canvas');
     c.width = c.height = n * 16;
     const g = c.getContext('2d');
-    if (cur.cells) {
-      g.font = '9px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
-        const v = cur.cells[y * 8 + x], [fill, icon, t1, t2] = DUNGEON_CELL[v >> 4] || ['#333', '?'];
-        g.fillStyle = fill; g.fillRect(x * 16, y * 16, 16, 16);
-        if (t1 !== undefined) {
-          if (t2 === undefined) g.drawImage(atlas, (t1 % 32) * 16, (t1 >> 5) * 16, 16, 16, x * 16, y * 16, 16, 16);
-          else {   // ladders up and down: half of each
-            g.drawImage(atlas, (t1 % 32) * 16, (t1 >> 5) * 16, 8, 16, x * 16, y * 16, 8, 16);
-            g.drawImage(atlas, (t2 % 32) * 16 + 8, (t2 >> 5) * 16, 8, 16, x * 16 + 8, y * 16, 8, 16);
-          }
-        }
-        if (icon) { g.fillStyle = '#eee'; g.fillText(icon === 'R' ? String(v & 15) : icon, x * 16 + 8, y * 16 + 9); }
-      }
-    } else {
-      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-        const t = cur.tiles[y * n + x];
-        g.drawImage(atlas, (t % 32) * 16, (t >> 5) * 16, 16, 16, x * 16, y * 16, 16, 16);
-      }
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      const t = cur.tiles[y * n + x];
+      if (cur.area !== 'combat' || t > 0) this.tile(g, t, x * 16, y * 16, cur.area === 'combat');
     }
     this.base = c; this.baseKey = key;
     return c;
   },
-  // a large map at a few pixels per tile: one pixel per cell in the tile's colour
+  // a large map at one pixel per tile, in the original's colours
   smallImage(cur) {
     if (this.smallKey === cur.key) return this.small;
-    const cols = U5.colours(), c = document.createElement('canvas');
+    const c = document.createElement('canvas');
     c.width = c.height = 256;
     const g = c.getContext('2d'), img = g.createImageData(256, 256);
     for (let i = 0; i < 65536; i++) {
-      const t = cur.tiles[i] * 3;
-      img.data.set([cols[t], cols[t + 1], cols[t + 2], 255], i * 4);
+      const rgb = TILE_RGB[cur.tiles[i]] || TILE_RGB[0];
+      img.data.set([rgb[0], rgb[1], rgb[2], 255], i * 4);
     }
     g.putImageData(img, 0, 0);
     this.small = c; this.smallKey = cur.key;
@@ -940,6 +1167,23 @@ const Render = {
     this.mask = c; this.maskKey = key;
     return c;
   },
+  prepare() {
+    const W = this.size(), c = this.canvas;
+    if (c.width !== W || c.height !== W) { c.width = c.height = W; }
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.lineWidth = 1;
+    g.fillStyle = '#000000'; g.fillRect(0, 0, W, W);
+    return [g, W];
+  },
+  // a message instead of the map, the original's way: Verdana, grey, the lines centred
+  message(text) {
+    const [g, W] = this.prepare();
+    g.font = `${pt(round(W / 35))}px Verdana`; g.fillStyle = '#CCCCCC'; g.textBaseline = 'top'; g.textAlign = 'left';
+    const lines = text.split('\n'), lh = this.textHeight(g);
+    let y = Math.trunc((W - lh * lines.length) / 2);
+    for (const l of lines) { g.fillText(l, Math.trunc((W - g.measureText(l).width) / 2), y); y += lh; }
+  },
   draw() {
     const msg = $('#msg');
     if (!Game.save) return;
@@ -955,167 +1199,229 @@ const Render = {
     if (msg.innerHTML) msg.innerHTML = '';
     const cur = this.current();
     if (!cur) return;
-    const n = cur.n, ts = this.tileSize(n);
-    const c = this.canvas, g = c.getContext('2d'), size = Math.round(n * ts);
-    if (c.width !== size || c.height !== size) { c.width = size; c.height = size; }
-    g.fillStyle = '#000'; g.fillRect(0, 0, size, size);
-    const showAll = Explored.shown(cur.area), small = !cur.cells && ts < 8;
-    // a few pixels per tile: the tiles' colours like the original, else the tiles themselves
-    g.imageSmoothingEnabled = !small && ts < 12;
-    g.imageSmoothingQuality = 'high';
-    g.drawImage(small ? this.smallImage(cur) : this.baseImage(cur), 0, 0, size, size);
-    g.imageSmoothingEnabled = false;
-    if (!showAll) g.drawImage(this.maskImage(cur), 0, 0, size, size);
-    const exp = Explored.get(cur.key);
-    const atlas = U5.tiles();
-    // map units (NPCs, monsters, vehicles, the party) on this floor
-    if (cur.area === 'combat') this.drawCombat(g, ts);
-    else if (!cur.cells && !small) {
-      const units = Game.save.subarray(0x6B4, 0x6B4 + 256), names = [];
-      for (let i = 31; i >= 0; i--) {
-        const u = units.subarray(i * 8, i * 8 + 8);
-        if (i && !u[0] && !u[1]) continue;
-        const ux = i ? u[2] : Game.x, uy = i ? u[3] : Game.y;
-        if (ux >= n || uy >= n) continue;
-        if (i && cur.area === 'small' && (u[4] > 127 ? u[4] - 256 : u[4]) !== Game.z) continue;
-        if (i && !showAll && !exp[uy * n + ux] && !Settings.v.debug) continue;
-        const t = 0x100 + u[0];
-        g.drawImage(atlas, (t % 32) * 16, (t >> 5) * 16, 16, 16, ux * ts, uy * ts, ts, ts);
-        if (i && Settings.v.npcNames && cur.area === 'small' && ts >= 12) {
-          const name = U5.npcName(Game.loc, i);
-          if (name) names.push([name, ux * ts + ts / 2, uy * ts]);
+    const [g, W] = this.prepare();
+    if (cur.area === 'world' || cur.area === 'under') this.drawLarge(g, cur, W);
+    else if (cur.area === 'dungeon') this.drawDungeon(g, cur, W);
+    else if (cur.area === 'combat') this.drawCombat(g, cur, W);
+    else this.drawSmall(g, cur, W);
+    this.follow(W);
+  },
+  drawLarge(g, cur, W) {
+    const S = Settings.v, under = cur.area === 'under', cell = W / 256;
+    const showAll = under ? S.underworldExplored : S.worldExplored, exp = Explored.get(cur.key);
+    g.drawImage(this.smallImage(cur), 0, 0, W, W);
+    if (!showAll) g.drawImage(this.maskImage(cur), 0, 0, W, W);
+    if (S.debug) {   // the 16x16 chunks, and the 2x2 of them the game keeps in memory (2F5/2F6)
+      g.strokeStyle = '#000000';
+      for (let k = 1; k < 16; k++) {
+        const p = round(k * 16 * cell) + 0.5;
+        g.beginPath(); g.moveTo(p, 0); g.lineTo(p, W); g.stroke();
+        g.beginPath(); g.moveTo(0, p); g.lineTo(W, p); g.stroke();
+      }
+      const ox = Game.save[0x2F5], oy = Game.save[0x2F6];
+      g.strokeStyle = '#FFFF00';
+      this.frame(g, round(ox * cell), round(oy * cell), round((ox + 32) * cell), round((oy + 32) * cell));
+    }
+    if (under ? S.underworldTitles : S.worldTitles) {
+      g.font = `${pt(clamp(Math.trunc(W / 65), 8, 16))}px Verdana`;
+      const titles = [];
+      for (let loc = 1; loc <= 40; loc++) {
+        const xy = U5.locXY(loc);
+        if (!xy) continue;
+        let [x, y] = xy;
+        if (!showAll && !exp[y * 256 + x]) continue;
+        if (!under) {
+          if ([2, 19, 20, 21, 25, 40].includes(loc)) continue;
+          const sh = TITLE_SHIFTS[loc];
+          if (sh) { x += sh[0]; y += sh[1]; }
+        } else if (loc !== 25 && (loc < 33 || loc > 40)) continue;
+        titles.push([x, y, LOC_NAMES[loc]]);
+      }
+      EXTRA_TITLES[under ? 'under' : 'world'].forEach(([x, y, name], i) => {
+        if (!showAll && !exp[y * 256 + x]) return;
+        if (!under && i === 1) { x -= 7; y += 1; }
+        titles.push([x, y, name]);
+      });
+      for (const [x, y, name] of titles) this.title(g, round(x * cell), round(y * cell), name);
+    }
+    if (S.partyLocation) {   // the party's cell in white, the 11x11 the game shows framed in grey
+      const px = round(Game.x * cell), py = round(Game.y * cell), cs = round(cell), a = round(cell * 5), b = round(cell * 6);
+      g.fillStyle = '#FFFFFF'; g.fillRect(px, py, cs, cs);
+      g.strokeStyle = '#CCCCCC';
+      this.frame(g, px - a, py - a, px + b, py + b);
+      this.frame(g, px - a - 1, py - a - 1, px + b + 1, py + b + 1);
+    }
+    if (this.lens && this.mouseCell) this.drawLens(g, cur, W);
+  },
+  // a title: centred on x with its bottom at y, white over a black shadow 2 pixels off
+  title(g, x, y, name) {
+    g.textAlign = 'left'; g.textBaseline = 'top';
+    const w = g.measureText(name).width, h = this.textHeight(g), tx = x - (w >> 1), ty = y - h;
+    g.fillStyle = '#000000'; g.fillText(name, tx + 2, ty + 2);
+    g.fillStyle = '#FFFFFF'; g.fillText(name, tx, ty);
+  },
+  // the zoom view: an odd number of tiles (a 64th of the window) around the mouse tile,
+  // the tiles at double size, in the half of the window away from the mouse; it shows
+  // the map as it is, explored or not
+  drawLens(g, cur, W) {
+    let tiles = (W >> 1) >> 5;
+    if (!(tiles & 1)) tiles--;
+    tiles = Math.max(1, tiles);
+    const L = tiles * 16, half = tiles >> 1, m = this.mouseCell, lc = this.work;
+    lc.width = lc.height = L;
+    const lg = lc.getContext('2d');
+    lg.fillStyle = '#000000'; lg.fillRect(0, 0, L, L);
+    for (let r = 0; r < tiles; r++) for (let k = 0; k < tiles; k++) {
+      const tx = m.x - half + k, ty = m.y - half + r;
+      if (tx >= 0 && ty >= 0 && tx < 256 && ty < 256) this.tile(lg, cur.tiles[ty * 256 + tx], k * 16, r * 16);
+    }
+    const bottom = this.mouseCell.py <= Math.trunc(W / 2);
+    const x0 = Math.trunc((W - 2 * L) / 2), y0 = Math.trunc((Math.trunc(W / 2) - 2 * L) / 2) + (bottom ? Math.trunc(W / 2) : 0);
+    g.drawImage(lc, 0, 0, L, L, x0, y0, 2 * L, 2 * L);
+    g.strokeStyle = '#AAAAAA';
+    this.frame(g, x0, y0, x0 + 2 * L, y0 + 2 * L);
+    this.frame(g, x0 - 1, y0 - 1, x0 + 2 * L + 1, y0 + 2 * L + 1);
+    const mx = Math.trunc(W / 2), my = Math.trunc(W / 4) - 16 + (bottom ? Math.trunc(W / 2) : 0);
+    g.strokeStyle = '#FFFFFF';
+    this.frame(g, mx - 16, my, mx + 16, my + 32);
+    this.frame(g, mx - 17, my - 1, mx + 17, my + 33);
+  },
+  drawSmall(g, cur, W) {
+    const S = Settings.v, cell = W / 32, f = this.work, zb = Game.save[0x2EF];
+    f.width = f.height = 512;
+    const fg = f.getContext('2d');
+    fg.drawImage(this.baseImage(cur), 0, 0);
+    // the save's units on this floor where the view shows them (anywhere once "towns
+    // explored" is on); the party's own sprite (tile 1C) only with "party location"
+    for (let i = 0; i < 32; i++) {
+      const u = Game.unit(i);
+      if (!u.tile || u.z !== zb || u.x >= 32 || u.y >= 32 || (u.tile === 0x1C && !S.partyLocation)) continue;
+      if (!S.townsExplored && !Visible.cells[u.y * 32 + u.x]) continue;
+      this.tile(fg, 0x100 + u.tile, u.x * 16, u.y * 16, true);
+    }
+    g.drawImage(f, 0, 0, 512, 512, 0, 0, W, W);
+    if (!S.townsExplored) g.drawImage(this.maskImage(cur), 0, 0, W, W);
+    if (S.npcNames) {
+      g.font = `${pt(clamp(Math.trunc(W / 60), 8, 16))}px Verdana`;
+      for (let i = 0; i < 32; i++) {
+        const u = Game.unit(i);
+        if (!u.tile || u.z !== zb || u.x >= 32 || u.y >= 32) continue;
+        if (!S.townsExplored && !Visible.cells[u.y * 32 + u.x]) continue;
+        const name = Game.unitName(i);
+        if (name) this.label(g, round(u.x * cell + 8), round(u.y * cell), name);
+      }
+    }
+    if (this.mouse) {   // the cell under the mouse, framed in yellow
+      const [mx, my] = this.mouse, l = round(mx * cell), t = round(my * cell), r = round((mx + 1) * cell) + 1, b = round((my + 1) * cell) + 1;
+      g.strokeStyle = '#FFFF00';
+      this.frame(g, l - 1, t - 1, r, b);
+      this.frame(g, l - 2, t - 2, r + 1, b + 1);
+    }
+  },
+  // an NPC's name: white in a black box above the point
+  label(g, x, y, text) {
+    g.textAlign = 'left'; g.textBaseline = 'top';
+    const w = g.measureText(text).width, h = this.textHeight(g), tx = x - (w >> 1), ty = y - (h + 4);
+    g.fillStyle = '#000000'; g.fillRect(tx - 5, ty - 2, w + 10, h + 5);
+    g.fillStyle = '#FFFFFF'; g.fillText(text, tx, ty);
+  },
+  // a dungeon level: 8x8 cells of 16 pixels - corridors #333333, walls and doors,
+  // ladders, chests and fountains as tiles, the party as an arrow - at a scale of 1 to 4
+  // in the middle of the window, framed in grey
+  drawDungeon(g, cur, W) {
+    const S = Settings.v, exp = Explored.get(cur.key), d = this.dungeon;
+    d.width = d.height = 128;
+    const dg = d.getContext('2d');
+    dg.fillStyle = '#000000'; dg.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 64; i++) {
+      if (!S.dungeonsExplored && !exp[i]) continue;
+      const x = (i & 7) * 16, y = (i >> 3) * 16;
+      dg.fillStyle = '#333333'; dg.fillRect(x, y, 16, 16);
+      for (const t of DUNGEON_TILES[cur.cells[i] >> 4] || []) this.tile(dg, t, x, y, true);
+    }
+    if (S.partyLocation && Game.facing < 4) {   // the party: an arrow the way it faces (the original has bitmaps for this)
+      dg.save(); dg.translate(Game.x * 16 + 8, Game.y * 16 + 8); dg.rotate(Game.facing * Math.PI / 2);
+      dg.fillStyle = '#00AA00';
+      dg.beginPath(); dg.moveTo(0, -7); dg.lineTo(6, 0); dg.lineTo(2, 0); dg.lineTo(2, 7); dg.lineTo(-2, 7); dg.lineTo(-2, 0); dg.lineTo(-6, 0);
+      dg.closePath(); dg.fill();
+      dg.restore();
+    }
+    const f = clamp(Math.trunc(W / 128), 1, 4), ox = Math.trunc((W - 128 * f) / 2), oy = ox;
+    g.drawImage(d, 0, 0, 128, 128, ox, oy, 128 * f, 128 * f);
+    g.strokeStyle = '#666666';
+    this.frame(g, ox, oy, ox + 128 * f, oy + 128 * f);
+    this.dungeonBox = [ox, oy, 16 * f];
+  },
+  // the combat: the map's tiles, then a square for every combatant with its hit points
+  // ("Z" asleep) - blue for the one whose turn it is, green friendly, red hostile, purple
+  // charmed, invisible ones only in debug mode -, the crosshair while aiming and a Q
+  // while quickfight runs.  Nothing but the tiles when the screen isn't a fight.
+  drawCombat(g, cur, W) {
+    const cb = cur.combat, S = Settings.v;
+    g.drawImage(this.baseImage(cur), 0, 0, 176, 176, 0, 0, W, W);
+    const cell = round(W / 176 * 16), m = round(cell * 0.125);
+    if (!cb.over) {
+      g.font = `${pt(round(cell * 0.2))}px Verdana`;
+      for (const u of cb.units) {
+        if (!u || u.hp === 0 || (u.hidden && !S.debug) || u.x > 10 || u.y > 10) continue;
+        const colour = u.i === cb.active ? '#5555FF' : u.charmed ? '#AA22AA' : u.friendly ? '#22AA22' : '#BB2222';
+        const x = u.x * cell, y = u.y * cell, l = m + x + 1, t = m + y + 1, r = x + cell - m, b = y + cell - m;
+        g.fillStyle = colour; g.fillRect(l, t, r - l, b - t);
+        g.strokeStyle = halfBright(colour);
+        this.frame(g, l, t, r, b); this.frame(g, l + 1, t + 1, r - 1, b - 1);
+        g.fillStyle = '#FFFFFF'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillText(u.asleep ? 'Z' : String(u.hp), (l + r) / 2, (t + b) / 2);
+        g.textAlign = 'left'; g.textBaseline = 'top';
+      }
+      if (Game.save[0x2F2] === 1) {
+        const ax = Game.save[0x2F3], ay = Game.save[0x2F4];
+        if (ax < 11 && ay < 11) {
+          g.strokeStyle = '#FFFFFF';
+          this.frame(g, ax * cell, ay * cell, ax * cell + cell + 1, ay * cell + cell + 1);
+          this.frame(g, ax * cell + 1, ay * cell + 1, ax * cell + cell, ay * cell + cell);
         }
       }
-      for (const [name, x, y] of names) this.label(g, name, x, y, ts);
-    }
-    if (cur.cells) {   // in a dungeon: the party as a green arrow the way it faces (DS:6613)
-      const d = Game.ddir & 3, X = Game.x * ts + ts / 2, Y = Game.y * ts + ts / 2;
-      g.save(); g.translate(X, Y); g.rotate(d * Math.PI / 2);
-      g.fillStyle = '#00aa00'; g.strokeStyle = '#005500'; g.lineWidth = Math.max(1, ts / 24);
-      g.beginPath(); g.moveTo(0, -ts * 0.38); g.lineTo(ts * 0.3, ts * 0.3); g.lineTo(-ts * 0.3, ts * 0.3); g.closePath(); g.fill(); g.stroke();
-      g.restore();
-    } else if (small && Settings.v.partyLocation) this.partyFrame(g, Game.x * ts, Game.y * ts, ts);
-    if (cur.n === 256) this.titles(g, cur, ts, exp, showAll);
-    if (Settings.v.debug && cur.area === 'world') {   // the 16x16 chunks, and the four the game has in memory
-      g.strokeStyle = '#ffffff28'; g.lineWidth = 1;
-      for (let k = 16; k < n; k += 16) {
-        g.beginPath(); g.moveTo(k * ts + 0.5, 0); g.lineTo(k * ts + 0.5, size); g.stroke();
-        g.beginPath(); g.moveTo(0, k * ts + 0.5); g.lineTo(size, k * ts + 0.5); g.stroke();
+      if (Quickfight.on) {
+        g.font = `${pt(round(cell * 0.75))}px Verdana`; g.textBaseline = 'top'; g.textAlign = 'left';
+        const qx = W - (cell >> 1) - g.measureText('Q').width, qy = cell >> 2;
+        g.fillStyle = '#000000'; g.fillText('Q', qx + 3, qy + 3);
+        g.fillStyle = '#FFFF00'; g.fillText('Q', qx, qy);
       }
-      const cx = (Game.x >> 4) - (Game.x % 16 < 8 ? 1 : 0), cy = (Game.y >> 4) - (Game.y % 16 < 8 ? 1 : 0);
-      g.strokeStyle = '#40a0ff'; g.lineWidth = 2;
-      g.strokeRect(cx * 16 * ts, cy * 16 * ts, 32 * ts, 32 * ts);
     }
-    if (this.mouse && !(this.lens && cur.n === 256)) {
-      g.strokeStyle = '#ffff40'; g.lineWidth = 1;
-      g.strokeRect(this.mouse[0] * ts + 0.5, this.mouse[1] * ts + 0.5, ts - 1, ts - 1);
+    if (this.mouse) {
+      const [mx, my] = this.mouse, l = round(mx * cell), t = round(my * cell), r = round((mx + 1) * cell), b = round((my + 1) * cell);
+      g.strokeStyle = '#FFFF00';
+      this.frame(g, l, t, r, b); this.frame(g, l - 1, t - 1, r, b); this.frame(g, l - 2, t - 2, r, b);
     }
-    if (this.lens && cur.n === 256 && this.mouseCell) this.drawLens(g, cur, ts, size);
-    this.dirty = this.expDirty = false;
-    this.follow([Game.x, Game.y], ts);
-  },
-  // combat like the original: a square per combatant with its hit points, the
-  // party green, monsters red, the one whose turn it is blue
-  drawCombat(g, ts) {
-    const s = Math.round(ts * 0.71), fs = Math.round(Math.max(10, ts * 0.26));
-    g.font = `${fs}px Tahoma, Verdana, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-    for (const u of Game.combatants()) {
-      if (u.x >= 11 || u.y >= 11 || (!u.pc && !u.hp)) continue;   // dead monsters stay in the list
-      const [fill, edge] = u.active ? ['#5555ff', '#2a2a80'] : u.pc ? ['#22aa22', '#115511'] : ['#bb2222', '#5e1111'];
-      const x = Math.round(u.x * ts + (ts - s) / 2), y = Math.round(u.y * ts + (ts - s) / 2);
-      g.fillStyle = edge; g.fillRect(x, y, s, s);
-      g.fillStyle = fill; g.fillRect(x + 2, y + 2, s - 4, s - 4);
-      g.fillStyle = '#fff'; g.fillText(String(u.hp), x + s / 2, y + s / 2 + 1);
-    }
-  },
-  // the party on a large map at a small scale: a white cell in a 35 px frame
-  partyFrame(g, X, Y, ts) {
-    g.fillStyle = '#fff'; g.fillRect(X, Y, Math.max(ts, 2), Math.max(ts, 2));
-    const F = Math.round(Math.max(35, ts * 11)), fx = Math.round(X + ts / 2 - F / 2), fy = Math.round(Y + ts / 2 - F / 2);
-    g.strokeStyle = '#ccc'; g.lineWidth = 2; g.strokeRect(fx + 1, fy + 1, F - 2, F - 2);
-    g.fillStyle = '#949294';   // darker corner marks inside the frame
-    for (const [x, y, dx, dy] of [[fx + 2, fy + 2, 1, 1], [fx + F - 4, fy + 2, -1, 1], [fx + 2, fy + F - 4, 1, -1],
-      [fx + F - 4, fy + F - 4, -1, -1]]) {
-      g.fillRect(dx > 0 ? x : x - 3, y, 5, 2);
-      g.fillRect(x, dy > 0 ? y : y - 3, 2, 5);
-    }
-  },
-  // place names on the world and underworld maps (where explored); titles that
-  // would overlap are pushed apart
-  titles(g, cur, ts, exp, showAll) {
-    const s = Settings.v, under = cur.area === 'under';
-    if (!(under ? s.underworldTitles : s.worldTitles)) return;
-    const list = [];
-    for (const loc of under ? UNDER_LOCS : WORLD_LOCS) {
-      const xy = U5.locXY(loc);
-      if (xy) list.push([xy[0], xy[1], LOC_NAMES[loc]]);
-    }
-    list.push(...EXTRA_TITLES[under ? 'under' : 'world']);
-    const fs = Math.round(11 * Math.max(1, g.canvas.width / 768));
-    g.font = `${fs}px Tahoma, Verdana, sans-serif`;
-    const boxes = [];
-    for (const [x, y, name] of list) {
-      if (!showAll && !exp[y * 256 + x]) continue;
-      const w = g.measureText(name).width + 2, h = fs + 5;
-      boxes.push({ name, x: x * ts + ts / 2 - w / 2, y: y * ts - h, w, h });
-    }
-    for (let it = 0; it < 40; it++) {
-      let moved = false;
-      for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
-        const a = boxes[i], b = boxes[j];
-        const dx = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x), dy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
-        if (dx <= 0 || dy <= 0) continue;
-        moved = true;
-        if (dx < dy) { const d = (dx + 1) / 2 * (a.x + a.w / 2 <= b.x + b.w / 2 ? 1 : -1); a.x -= d; b.x += d; }
-        else { const d = (dy + 1) / 2 * (a.y + a.h / 2 <= b.y + b.h / 2 ? 1 : -1); a.y -= d; b.y += d; }
-      }
-      if (!moved) break;
-    }
-    g.textAlign = 'left'; g.textBaseline = 'top';
-    for (const b of boxes) {
-      g.fillStyle = '#000'; g.fillText(b.name, Math.round(b.x) + 2, Math.round(b.y) + 3);
-      g.fillStyle = '#fff'; g.fillText(b.name, Math.round(b.x) + 1, Math.round(b.y) + 2);
-    }
-  },
-  // the zoom view: 11 x 11 tiles around the mouse at double size, in the half of
-  // the map away from the mouse; like the original it shows the map as it is
-  drawLens(g, cur, ts, size) {
-    const m = this.mouseCell, atlas = U5.tiles(), lt = size >= 600 ? 32 : 16, L = 11 * lt + 2;
-    const lx = Math.round((size - L) / 2), mid = size / 2;
-    const ly = Math.round(m.y * ts + ts / 2 < mid ? mid + 14 : mid - 14 - L);
-    g.fillStyle = '#000'; g.fillRect(lx, ly, L, L);
-    for (let r = 0; r < 11; r++) for (let k = 0; k < 11; k++) {
-      const t = cur.tiles[((m.y - 5 + r) & 255) * 256 + ((m.x - 5 + k) & 255)];
-      g.drawImage(atlas, (t % 32) * 16, (t >> 5) * 16, 16, 16, lx + 1 + k * lt, ly + 1 + r * lt, lt, lt);
-    }
-    g.strokeStyle = '#aaa'; g.lineWidth = 2; g.strokeRect(lx, ly, L, L);
-    g.strokeStyle = '#fff'; g.strokeRect(lx + 1 + 5 * lt, ly + 1 + 5 * lt, lt, lt);
   },
   // keeps the party in sight when the map is bigger than the window
-  follow([vx, vy], ts) {
+  follow(W) {
     const w = $('#mapwrap');
-    if (this.canvas.width <= w.clientWidth && this.canvas.height <= w.clientHeight) return;
-    const px = vx * ts, py = vy * ts, m = 3 * ts;
+    if (W <= w.clientWidth && W <= w.clientHeight) return;
+    const cur = this.current();
+    if (!cur || cur.area === 'combat') return;
+    const cell = W / cur.n, px = Game.x * cell, py = Game.y * cell, m = 3 * cell;
     if (px < w.scrollLeft + m || px > w.scrollLeft + w.clientWidth - m) w.scrollLeft = px - w.clientWidth / 2;
     if (py < w.scrollTop + m || py > w.scrollTop + w.clientHeight - m) w.scrollTop = py - w.clientHeight / 2;
   },
-  // an NPC's name in the cell above it: white on black, like the original
-  label(g, text, cx, y, ts) {
-    const fs = Math.round(Math.max(10, Math.min(16, ts * 0.55)));
-    g.font = `${fs}px Tahoma, Verdana, sans-serif`;
-    const w = Math.ceil(g.measureText(text).width) + 10, h = Math.max(fs + 4, Math.round(ts));
-    const top = Math.round(y - h);
-    g.fillStyle = '#000'; g.fillRect(Math.round(cx - w / 2), top, w, h);
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillStyle = '#fff'; g.fillText(text, cx, top + h / 2 + 1);
-  },
+  // the cell under the mouse, mapped as the original maps it (the large maps round)
   cellAt(ev) {
     const cur = this.current();
     if (!cur) return null;
-    const r = this.canvas.getBoundingClientRect(), ts = this.canvas.width / cur.n;
-    const x = Math.floor((ev.clientX - r.left) / ts), y = Math.floor((ev.clientY - r.top) / ts);
+    const r = this.canvas.getBoundingClientRect(), W = this.canvas.width;
+    const px = Math.trunc(ev.clientX - r.left), py = Math.trunc(ev.clientY - r.top);
+    if (px < 0 || py < 0 || px >= W || py >= W) return null;
+    let x, y;
+    if (cur.n === 256) { x = round(px / (W / 256)); y = round(py / (W / 256)); }
+    else if (cur.n === 32) { const d = (W + 31) >> 5; x = Math.trunc(px / d); y = Math.trunc(py / d); }
+    else if (cur.n === 8) {
+      const [ox, oy, cs] = this.dungeonBox || [0, 0, 16];
+      if (px < ox || px > ox + cs * 8 || py < oy || py > oy + cs * 8) return null;
+      const d = (cs * 8 + 7) >> 3;
+      x = Math.trunc((px - ox) / d); y = Math.trunc((py - oy) / d);
+    } else { const d = Math.trunc(W / 11); x = Math.trunc(px / d); y = Math.trunc(py / d); }
     if (x < 0 || y < 0 || x >= cur.n || y >= cur.n) return null;
-    return { vx: x, vy: y, x, y, cur };
+    return { x, y, px, py, cur };
   },
 };
 
@@ -1123,21 +1429,21 @@ const Render = {
 
 function updateTitle() {
   if (!Game.save) return;
-  const a = Game.area(), m = Render.mouse && Render.mouseCell;
+  const a = Game.area(), m = Render.mouseCell;
   let t;
   if (a === 'world') t = `World - ${pad3(Game.x)},${pad3(Game.y)}`;
   else if (a === 'under') t = `Underworld - ${pad3(Game.x)},${pad3(Game.y)}`;
-  else if (a === 'combat') t = 'Combat';
+  else if (a === 'combat') t = Game.combat().hostiles > 0 ? 'Combat' : 'Ultimapper 5';
   else if (a === 'dungeon') t = `Dungeon ${LOC_NAMES[Game.loc]} - Level ${Game.z + 1} - ${pad3(Game.x)},${pad3(Game.y)}`;
-  else t = `${LOC_NAMES[Game.loc] || 'Location ' + Game.loc} - ${Game.z < 0 ? 'Basement' : 'Level ' + (Game.z + 1)} - ${pad3(Game.x)},${pad3(Game.y)}`;
-  if (m) t += ` - ${pad3(m.x)},${pad3(m.y)}`;
+  else t = `${LOC_NAMES[Game.loc] || 'Location ' + Game.loc} - ${Game.save[0x2EF] === 0xFF ? 'Basement' : 'Level ' + (Game.z + 1)} - ${pad3(Game.x)},${pad3(Game.y)}`;
+  if (m && a !== 'combat') t += ` - ${pad3(m.x)},${pad3(m.y)}`;
   $('#title').textContent = t;
   document.title = t + ' - Ultimapper 5';
 }
 
 /* ------------------------------------------------------- main loop */
 
-let lastArea = '', lastGems = -1;
+let lastKey = '', lastPeer = null, readFails = 0;
 
 async function loop() {
   Settings.load();
@@ -1163,37 +1469,66 @@ async function loop() {
         Game.base = await Game.find();
         if (Game.base === null) { await sleep(2000); continue; }
         log(`Ultima V found: data segment ${hex(Game.base >> 4)} (linear ${hex(Game.base, 6)})`);
+        lastKey = ''; lastPeer = null; readFails = 0; Game.lastChunk = [0, 0];
       }
-      const d = await Game.poll();
+      let d;
+      try {
+        d = await Game.poll();
+      } catch (e) {   // like the original: say so, give the game up after 20 failures in a row
+        log('Error while reading memory!');
+        if (++readFails >= 20) { Game.base = null; readFails = 0; }
+        throw e;
+      }
+      readFails = 0;
       if (d.save[0x2B5] < 1 || d.save[0x2B5] > 6) { Game.base = null; continue; }
-      const prevSave = Game.save;
       Object.assign(Game, d);
+      Game.tick++;
       Game.lastOk = Date.now();
       setConn(`DOSBox ${Game.info.version.split(' ')[0]}`, 'ok');
-      onUpdate(prevSave);
+      onUpdate();
     } catch (e) {
       setConn('DOSBox not answering', 'bad');
-      Game.base = null;
       await sleep(1500);
     }
-    await sleep(Quickfight.on ? 60 : 150);
+    await sleep(100);
   }
 }
 
 function setConn(text, cls) { const c = $('#conn'); c.textContent = text; c.className = 'chip ' + cls; }
 
-function onUpdate(prev) {
-  const area = Game.areaKey();
-  if (area !== lastArea) { if (lastArea) log(`Location: ${$('#title').textContent}`); lastArea = area; Render.dirty = true; }
-  if (Game.area() !== 'dungeon' || true) markVisible();
-  const gems = Game.save[0x207];
-  if (Settings.v.peerExplore && lastGems >= 0 && gems < lastGems) {   // a gem was used: the area was shown
-    if (Game.area() === 'small' || Game.area() === 'dungeon') Explored.fill(Game.areaKey(), 1);
-    else for (let dy = -16; dy < 16; dy++) for (let dx = -16; dx < 16; dx++) Explored.mark(Game.areaKey(), Game.x + dx, Game.y + dy);
-    log('Gem used: area marked as explored');
+/* One tick, as the original's read timer: the states that show a message instead of the
+ * map (character generation, not in the game, dead), then exploration, the gem / peer
+ * check, auto level-up, quickfight and the drawing. */
+function onUpdate() {
+  const s = Game.save, loc = Game.loc;
+  // (the chunk origin is the one seen last tick, like the original's: none yet right after finding the game)
+  if (s[0x6B4] === 0 && s[0x6B6] === 0 && loc === 13 && Game.x === 15 && Game.y === 15 && s[0x2EF] === 0 && !Game.lastChunk[0] && !Game.lastChunk[1]) {
+    Render.message(CHARGEN_TEXT); Hud.draw(); return;
   }
-  lastGems = gems;
-  if (Settings.v.autoLevelUp) AutoLevel.check();
+  if (loc === 0x40 || loc === 0x42) { Render.message(NOT_PLAYING_TEXT); return; }
+  if (loc > 40 && loc !== 0xFF) return;
+  if (loc !== 0xFF) { Quickfight.stop(true); Game.charmedSlots.clear(); }
+  Game.lastChunk = [s[0x2F5], s[0x2F6]];
+  const key = Game.areaKey();
+  if (key !== lastKey) {
+    if (lastKey) { log(''); log(`Location changed to ${loc} (z = ${s[0x2EF]}).`); }
+    lastKey = key;
+  }
+  const dead = Game.partyDead() || ((loc === 17 || loc === 0xFF) && s[0x6B4 + 8] === 0x74 && s[0x6B4 + 10] === 5 && s[0x6B4 + 11] === 2);
+  if (dead) {
+    if (!Game.wasDead) { log(''); log('You have died!'); }
+    Game.wasDead = true;
+    Quickfight.stop(true);
+    Render.message('You have died!'); Hud.draw();
+    $('#title').textContent = document.title = 'Ultimapper 5';
+    return;
+  }
+  Game.wasDead = false;
+  const peer = [s[0x207], s[0x271], s[0x27E]];   // gems, In Quas Wis mixed, In Quas Wis scrolls
+  if (lastPeer && Settings.v.peerExplore && peer.some((v, i) => v < lastPeer[i])) { Explored.peer(); log('Gem or In Quas Wis used: the area was shown'); }
+  lastPeer = peer;
+  markVisible();
+  if (Settings.v.autoLevelUp && loc !== 0xFF) AutoLevel.check();
   Quickfight.tick();
   Hud.draw();
   updateTitle();
@@ -1206,28 +1541,27 @@ function onUpdate(prev) {
 const cv = Render.canvas;
 cv.addEventListener('mousemove', ev => {
   const c = Render.cellAt(ev);
-  Render.mouse = c ? [c.vx, c.vy] : null;
+  Render.mouse = c ? [c.x, c.y] : null;
   Render.mouseCell = c;
   showTip(ev, c);
   updateTitle();
-  Render.draw();
+  // the original repaints on the move only where the mouse shows: small maps and combat
+  // (the yellow cell), and the large maps while the zoom view follows it
+  const a = Game.save ? Game.area() : '';
+  if (a === 'small' || a === 'combat' || (Render.lens && (a === 'world' || a === 'under'))) Render.draw();
 });
-cv.addEventListener('mouseleave', () => { Render.mouse = null; $('#tip').style.display = 'none'; Render.draw(); });
-cv.addEventListener('click', async ev => {
+cv.addEventListener('mouseleave', () => { Render.mouse = Render.mouseCell = null; $('#tip').style.display = 'none'; Render.draw(); });
+cv.addEventListener('mousedown', ev => {
+  if (!Game.save) return;
+  if (ev.button === 0 && Quickfight.on) { Quickfight.stop(); return; }
   const c = Render.cellAt(ev);
   if (!c) return;
-  if (ev.ctrlKey) { await teleport(c); return; }
-  if (Quickfight.on) { Quickfight.stop(); return; }
-  if (c.cur.area === 'combat') {   // a party member's square opens the editor
-    const u = Game.combatants().find(u => u.pc && u.x === c.x && u.y === c.y);
-    if (u) Editor.open(u.pc.index);
-    return;
-  }
-  if (c.cur.n === 256) { Render.lens = !Render.lens; Render.mouse = [c.vx, c.vy]; Render.mouseCell = c; Render.draw(); }
+  if (ev.ctrlKey && ev.button === 0) { if (Settings.v.debug) teleport(c); return; }
+  if (ev.button === 0 && Game.loc === 0) { Render.lens = !Render.lens; Render.draw(); }
 });
 cv.addEventListener('contextmenu', ev => { ev.preventDefault(); Menu.show(ev.clientX, ev.clientY); });
 $('#menuBtn').onclick = ev => { const r = ev.target.getBoundingClientRect(); Menu.show(r.right - 240, r.bottom); };
-window.addEventListener('resize', () => { Render.dirty = true; Render.draw(); });
+window.addEventListener('resize', () => { Hud.last = ''; Hud.draw(); Render.draw(); });
 
 function showTip(ev, c) {
   const tip = $('#tip');
@@ -1236,20 +1570,19 @@ function showTip(ev, c) {
   if (c.cur.tiles) lines[0] += `  tile ${hex(c.cur.tiles[c.y * c.cur.n + c.x], 2)}`;
   if (c.cur.cells) lines[0] += `  cell ${hex(c.cur.cells[c.y * 8 + c.x], 2)}`;
   if (c.cur.area === 'combat') {
-    for (const u of Game.combatants()) if (u.x === c.x && u.y === c.y)
-      lines.push(u.pc ? `${u.pc.name}  HP ${u.hp} / ${u.pc.maxhp}` : `Monster (sprite ${hex(u.tile, 3)})  HP ${u.hp}`);
+    for (const u of c.cur.combat.units) if (u && u.x === c.x && u.y === c.y && u.hp > 0 && (!u.hidden || Settings.v.debug))
+      lines.push(`${u.name || 'unit ' + u.i}  HP ${u.hp}${u.asleep ? ', asleep' : ''}${u.charmed ? ', charmed' : ''}`);
     tip.textContent = lines.join('\n');
     tip.style.display = 'block';
     tip.style.left = ev.clientX + 14 + 'px';
     tip.style.top = ev.clientY + 14 + 'px';
     return;
   }
-  const units = Game.save.subarray(0x6B4, 0x6B4 + 256);
   for (let i = 1; i < 32; i++) {
-    const u = units.subarray(i * 8, i * 8 + 8);
-    if ((u[0] || u[1]) && u[2] === c.x && u[3] === c.y) {
-      const name = c.cur.area === 'small' ? U5.npcName(Game.loc, i) : '';
-      lines.push(`${name || 'unit ' + i} (sprite ${hex(0x100 + u[0], 3)})`);
+    const u = Game.unit(i);
+    if (u.tile && u.x === c.x && u.y === c.y && (c.cur.area !== 'small' || u.z === Game.save[0x2EF])) {
+      const name = c.cur.area === 'small' ? Game.unitName(i) : '';
+      lines.push(`${name || 'unit ' + i} (sprite ${hex(0x100 + u.tile, 3)})`);
     }
   }
   if (c.cur.n === 256) for (let loc = 1; loc <= 40; loc++) {
@@ -1267,17 +1600,18 @@ document.addEventListener('keydown', ev => {
   if (Quickfight.on && !ev.ctrlKey) { Quickfight.stop(); ev.preventDefault(); return; }
   const k = ev.key.toLowerCase();
   const act = ev.ctrlKey ? { d: toggleDebug, e: () => Editor.open(), t: forwardTime, x: exitCombat, l: () => LogWin.open(),
-    s: backupSaves, q: quit, '.': () => Quickfight.toggle() }[k]
+    s: backupSaves, q: quit }[k]
     : { s: () => Lists.open('spells'), i: () => Lists.open('inventory'), q: () => Quickfight.toggle(),
-      pageup: () => zoomBy(+1), pagedown: () => zoomBy(-1), escape: () => { Menu.hide(); Dlg.closeTop(); } }[k];
+      pageup: () => sizeBy(16), pagedown: () => sizeBy(-16), escape: () => { Menu.hide(); Dlg.closeTop(); } }[k];
   if (act) { ev.preventDefault(); act(); }
 });
 
-function zoomBy(d) {
-  const cur = Render.current();
-  let z = Settings.v.zoom || Render.tileSize(cur ? cur.n : 32);
-  z = Math.max(1, Math.min(48, z + d * (z >= 8 ? 2 : 1)));
-  Settings.v.zoom = z; Settings.save(); Render.dirty = true; Render.draw();
+// the map window's size, like the original's: 512 to 1600 pixels, in steps of 16
+function setSize(n) { Settings.v.size = n; Settings.save(); Hud.last = ''; Render.draw(); }
+function sizeBy(d) {
+  const n = Render.size() + d;
+  if (n < 512 || n > 1600) return;
+  setSize(n);
 }
 
 /* ------------------------------------------------------------ menu */
@@ -1285,21 +1619,21 @@ function zoomBy(d) {
 const Menu = {
   root: null,
   items() {
-    const s = Settings.v, chk = k => ({ checked: s[k], act: () => { s[k] = !s[k]; Settings.save(); Render.dirty = true; Render.draw(); Hud.last = ''; Hud.draw(); } });
-    const sizeTo = n => () => { const cur = Render.current(); Settings.v.zoom = Math.max(1, Math.round(n / (cur ? cur.n : 32))); Settings.save(); Render.draw(); };
+    const s = Settings.v, chk = k => ({ checked: s[k], act: () => { s[k] = !s[k]; Settings.save(); Hud.last = ''; Hud.draw(); Render.draw(); } });
+    const pdf = (key, label) => ({ label, disabled: !Files.pdfs.has(key), act: () => openPdf(key) });
     return [
       { label: 'Window', sub: [
-        { label: 'Size to 512', act: sizeTo(512) }, { label: 'Size to 768', act: sizeTo(768) },
-        { label: 'Size to 1024', act: sizeTo(1024) }, { label: 'Fit to window', act: () => { Settings.v.zoom = 0; Settings.save(); Render.draw(); } },
-        '-', { label: 'Decrease size', key: 'PgDn', act: () => zoomBy(-1) }, { label: 'Increase size', key: 'PgUp', act: () => zoomBy(+1) },
+        { label: 'Size to 512', act: () => setSize(512) }, { label: 'Size to 768', act: () => setSize(768) },
+        { label: 'Size to 1024', act: () => setSize(1024) }, { label: 'Fit to window', act: () => setSize(0) },
+        '-', { label: 'Decrease size', key: 'PgDn', act: () => sizeBy(-16) }, { label: 'Increase size', key: 'PgUp', act: () => sizeBy(16) },
         '-', { label: 'Show HUD', ...chk('hud') },
-        { label: 'Open in its own window', act: () => window.open(location.href, 'ultimapper5', 'popup,width=1100,height=900') }] },
+        '-', { label: 'Open in its own window', act: () => window.open(location.href, 'ultimapper5', 'popup,width=1100,height=900') }] },
       '-',
       { label: 'Map exploration', sub: [
         { label: 'World explored', ...chk('worldExplored') }, { label: 'Underworld explored', ...chk('underworldExplored') },
         { label: 'Towns explored', ...chk('townsExplored') }, { label: 'Dungeons explored', ...chk('dungeonsExplored') },
-        '-', { label: 'Explore area', act: () => Game.save && Explored.fill(Game.areaKey(), 1) },
-        { label: 'Unexplore area', act: () => Game.save && Explored.fill(Game.areaKey(), 0) },
+        '-', { label: 'Explore area', act: () => Game.save && Game.area() !== 'combat' && Explored.fill(Game.areaKey(), 1) },
+        { label: 'Unexplore area', act: () => Game.save && Game.area() !== 'combat' && Explored.fill(Game.areaKey(), 0) },
         '-', { label: 'Unexplore all', act: () => confirm('Forget everything explored so far?') && Explored.clearAll() },
         '-', { label: 'Explore when gem / spell used', ...chk('peerExplore') }] },
       { label: 'Map elements', sub: [
@@ -1307,18 +1641,21 @@ const Menu = {
         '-', { label: 'NPC names', ...chk('npcNames') }, '-', { label: 'Party location', ...chk('partyLocation') }] },
       '-',
       { label: 'Quickfight', sub: [
-        { label: 'Change interval', act: () => { const v = prompt('Interval between keypresses (ms):', s.qfInterval); if (v && +v >= 50) { s.qfInterval = +v; Settings.save(); } } },
-        '-', { label: 'Insta-aiming', ...chk('qfAim') },
-        { label: 'Toggle quickfight', key: 'Q', act: () => Quickfight.toggle() }] },
+        { label: `Change interval (currently ${s.qfInterval})`, act: () => {
+          const v = prompt(`Change quickfight interval\nDefault interval is 400 ms, current ${s.qfInterval} ms.`, s.qfInterval);
+          if (v !== null && +v > 0) { s.qfInterval = Math.trunc(+v); Settings.save(); }
+        } },
+        '-', { label: 'Insta-aiming', ...chk('qfAim') }] },
+      { label: 'Toggle quickfight', key: 'Q', disabled: !Quickfight.on && !Quickfight.possible(), act: () => Quickfight.toggle() },
       '-', { label: 'Auto level up', ...chk('autoLevelUp') },
       '-', { label: 'Inventory', key: 'I', act: () => Lists.open('inventory') },
       { label: 'Spells', key: 'S', act: () => Lists.open('spells') },
       '-',
       { label: 'Manuals', sub: [
         { label: 'Ultimapper 5', act: () => Help.open() }, '-',
-        ...Object.entries({ manual: 'Manual', ref: 'Reference card', lore: 'Book of Lore', spellbook: 'Spellbook',
-          cluebook: 'Cluebook' }).map(([k, l]) => ({ label: l, act: () => openPdf(k) }))] },
-      '-', { label: 'Save map as image', act: saveMapImage },
+        pdf('manual', 'Manual'), pdf('ref', 'Reference card'), pdf('lore', 'Book of Lore'), pdf('spellbook', 'Spellbook'),
+        pdf('cluebook', 'Cluebook')] },
+      '-', { label: 'Save map as bitmap', act: saveMapImage },
       '-', { label: 'Backup saved game', key: 'Ctrl+S', act: backupSaves },
       '-', { label: 'Game folder…', act: () => pickFolder() },
       '-',
@@ -1396,8 +1733,8 @@ const Dlg = {
   },
 };
 
-// spells by circle, then by name, as the original lists them (indexes into SPELLS)
-const SPELL_ORDER = SPELLS.map((_, i) => i).sort((a, b) => SPELLS[a][1] - SPELLS[b][1] || SPELLS[a][0].localeCompare(SPELLS[b][0]));
+// the original lists the spells in SAVED.GAM order: six a circle
+const SPELL_ORDER = SPELLS.map((_, i) => i);
 
 // the spell list and the inventory share one window, like the original's
 const Lists = {
@@ -1429,23 +1766,29 @@ const Lists = {
     this.sig = sig;
     body.replaceChildren(this.mode === 'spells' ? this.spells(s) : this.inventory(s));
   },
-  // L, N, spell, effect, how many can be mixed, the reagents (green: have some, red: none)
+  // L, N, spell, effect, how many can be mixed (the scarcest reagent, nothing at 99),
+  // the reagents (green: have some, red: none, a dash where not needed)
   spells(s) {
     const t = el('table', { className: 'list spells' }), have = r => s[0x2AA + r];
     t.append(el('tr', {}, ...['L', 'N', 'SPELL', 'EFFECT', 'CAN MIX', ...REAGENT_ABBR.map(a => a.toUpperCase())]
       .map((h, k) => el('th', { textContent: h, className: k < 2 || k > 3 ? 'c' : '' }))));
     t.append(el('tr', { className: 'counts' }, el('td', { colSpan: 5 }),
-      ...REAGENT_ABBR.map((_, r) => el('td', { className: 'c', textContent: have(r) || '-' }))));
+      ...REAGENT_ABBR.map((_, r) => el('td', { className: 'c' + (have(r) ? '' : ' dash'), textContent: have(r) || '-' }))));
     SPELL_ORDER.forEach((i, row) => {
       const [name, circle, mask, effect] = SPELLS[i], n = s[0x24A + i];
       const need = REAGENT_ABBR.map((_, r) => mask >> r & 1);
-      const can = Math.min(99 - n, ...need.map((x, r) => x ? have(r) : Infinity));
+      let can = 0;
+      if (n < 99) for (let r = 0; r < 8; r++) {
+        if (!need[r]) continue;
+        if (!have(r)) { can = 0; break; }
+        if (have(r) < can || can === 0) can = have(r);
+      }
       const tr = el('tr', { className: (row === this.sel ? 'sel ' : '') + (n ? 'known' : 'na'),
         onclick: () => { this.sel = row; mixSpell(i); } },
         el('td', { className: 'c', textContent: circle }), el('td', { className: 'c', textContent: n }),
         el('td', { textContent: name }), el('td', { textContent: effect }),
-        el('td', { className: 'c mix', textContent: can > 0 && can !== Infinity ? can : '-' }),
-        ...need.map((x, r) => el('td', { className: 'c ' + (x ? (have(r) ? 'got' : 'miss') : ''), textContent: x ? REAGENT_ABBR[r] : '-' })));
+        el('td', { className: 'c ' + (can > 0 ? 'mix' : 'dash'), textContent: can > 0 ? can : '-' }),
+        ...need.map((x, r) => el('td', { className: 'c ' + (x ? (have(r) ? 'got' : 'miss') : 'dash'), textContent: x ? REAGENT_ABBR[r] : '-' })));
       t.append(tr);
     });
     return t;
@@ -1459,7 +1802,7 @@ const Lists = {
         c.append(el('h4', { textContent: title }));
         for (const [off, name, note] of items) {
           const n = s[off] === 0xFF ? 1 : s[off];   // the pocket watch is FF when owned
-          c.append(el('div', { className: n ? 'got' : '' }, el('span', { className: 'n', textContent: n || '-' }),
+          c.append(el('div', { className: n ? 'got' : '' }, el('span', { className: 'n' + (n ? '' : ' dash'), textContent: n || '-' }),
             el('span', { textContent: name }), ...(note ? [el('span', { className: 'note', textContent: `(${note})` })] : [])));
         }
       }
@@ -1472,6 +1815,7 @@ const Lists = {
 // mixes one of spell i, using one of each of its reagents (like the game's Mix command)
 async function mixSpell(i) {
   const [name, , mask] = SPELLS[i], s = Game.save;
+  if (Game.loc === 0xFF && Game.combat().hostiles > 0) { log('Not while fighting'); return; }
   const rs = REAGENTS.map((_, r) => mask >> r & 1);
   if (rs.some((need, r) => need && !s[0x2AA + r])) { log(`Not enough reagents for ${name}`); return; }
   if (s[0x24A + i] >= 99) return;
@@ -1562,17 +1906,25 @@ const Editor = {
 
 // like the original: level + 1, hit points and their maximum = level x 30,
 // one of STR / DEX / INT + 1
+// the original's: the first six records in the party with the experience for the next
+// level (up to 8): level + 1, hit points and their maximum = level x 30, and one of
+// STR / DEX / INT below 30 + 1, chosen at random
 const AutoLevel = {
   check() {
-    for (const p of Game.party()) {
-      if (p.level >= 8 || p.status === 0x44) continue;
-      if (p.xp < LEVEL_XP[p.level]) continue;
-      const stat = 0x0C + Math.floor(Math.random() * 3);
-      const o = p.off, level = p.level + 1, hp = Math.min(240, level * 30);
-      Game.writeSave(o + 0x16, [level]);
+    const s = Game.save;
+    for (let i = 0; i < 16; i++) {
+      const o = 2 + i * 32, level = s[o + 0x16];
+      if (s[o + 0x1F] !== 0 || level >= 8) continue;
+      if ((s[o + 0x14] | s[o + 0x15] << 8) < LEVEL_XP[level]) continue;
+      const nl = level + 1, hp = nl * 30, name = Game.recordName(o, 10);
+      Game.writeSave(o + 0x16, [nl]);
       Game.writeSave(o + 0x10, [hp & 255, hp >> 8, hp & 255, hp >> 8]);
-      Game.writeSave(o + stat, [Math.min(50, Game.save[o + stat] + 1)]);
-      log(`${p.name} reached experience level ${level}. Increased ${['STR', 'DEX', 'INT'][stat - 0x0C]}.`);
+      const cands = [0, 1, 2].filter(k => s[o + 0x0C + k] < 30);
+      if (cands.length) {
+        const k = cands[Math.floor(Math.random() * cands.length)];
+        Game.writeSave(o + 0x0C + k, [s[o + 0x0C + k] + 1]);
+        log(`${name} reached experience level ${nl}. Increased ${['STR', 'DEX', 'INT'][k]}.`);
+      } else log(`${name} reached experience level ${nl}.`);
     }
   },
 };
@@ -1598,103 +1950,307 @@ const KEYS = { up: [0x48, 0], down: [0x50, 0], left: [0x4B, 0], right: [0x4D, 0]
  * direction when next to it, A and aim with a ranged weapon in range) or step
  * towards it. Insta-aiming writes the crosshair (save 2F3/2F4, set by the game
  * after A; 2F2 = 1 while aiming) instead of moving it with the arrow keys. */
-const AMMO = { 26: 27, 28: 29, 36: -1 };   // bow: arrows, crossbow: quarrels, magic bow: none needed
+/* Quickfight, step for step the original's: on a friendly unit's turn it looks for a
+ * target and sends the game one key for the next thing to do (A, an arrow, Enter,
+ * Space), one key per interval; it equips weapons from the party's inventory when
+ * the hands don't suit, and tells the log what it does.  Keys go into the BIOS
+ * keyboard buffer through the memory API. */
+const RANGED = new Set([0x11, 0x13, 0x1A, 0x1C, 0x24]);   // sling, flaming oil, bow, crossbow, magic bow: aimed
+const REACH = new Set([0x19, 0x22, 0x26]);                 // morning star, halberd, magic axe: a range without aiming
+const RANGED_PREF = [[0x24, 0xFF], [0x1C, 0xFF], [0x1A, 0xFF], [0x11, 0xFF]];
+const DIR = [null, [0, -1], [1, 0], [0, 1], [-1, 0]], DIR_KEY = [null, 'up', 'right', 'down', 'left'],
+  DIR_NAME = [null, 'ARROW UP', 'ARROW RIGHT', 'ARROW DOWN', 'ARROW LEFT'];
+const NEAR8 = DUNGEON_NEAR.slice(1);
+const inMap = (x, y) => x >= 0 && y >= 0 && x < 11 && y < 11;
+// 1 up, 2 right, 3 down, 4 left: the way from one cell to another, x first
+const dirTo = (x1, y1, x2, y2) => x1 < x2 ? 2 : x1 > x2 ? 4 : y1 < y2 ? 3 : y1 > y2 ? 1 : 0;
+
 const Quickfight = {
-  on: false, next: 0, busy: false, last: null,
-  toggle() { this.on ? this.stop() : this.start(); },
-  start() { this.on = true; $('#qf').classList.remove('hidden'); log('Quickfight on'); },
-  stop() { this.on = false; $('#qf').classList.add('hidden'); log('Quickfight off'); },
-  range(item) {
-    const ovl = Files.data['DATA.OVL'];
-    if (!ovl || item === 0xFF) return 0;
-    const ammo = AMMO[item];
-    if (ammo > 0 && !Game.save[0x21A + ammo]) return 0;   // no arrows / quarrels
-    return ovl[0x1674 + item];
+  on: false, busy: false, next: 0,
+  // the original allows it in a real fight only
+  possible() { return !!Game.save && Game.loc === 0xFF && !Game.combat().over; },
+  toggle() { if (this.on) this.stop(); else if (this.possible()) this.start(); },
+  start() { this.on = true; $('#qf').classList.remove('hidden'); log('Quickfight on'); Render.draw(); },
+  stop(silent) {
+    if (!this.on) return;
+    this.on = false; $('#qf').classList.add('hidden');
+    if (!silent) log('Quickfight off');
+    Render.draw();
   },
-  async keys(...list) { for (const k of list) { await pushKey(...k); await sleep(Settings.v.qfInterval / 3); } },
+  // a weapon's range from DATA.OVL (1684 + item - 10), 0 for anything else
+  range(item) { const ovl = Files.data['DATA.OVL']; return ovl && item >= 0x10 && item < 0x2A ? ovl[0x1674 + item] : 0; },
+  itemName(i) { return i < 0x30 ? HUD_ITEMS[i] : '-'; },
+  key(name) { return pushKey(...KEYS[name]); },
   tick() {
     if (!this.on || this.busy || Date.now() < this.next || Game.area() !== 'combat') return;
     this.next = Date.now() + Settings.v.qfInterval;
-    const party = Game.party(), turn = Game.save[0x2F8];
-    if (turn >= party.length) return;   // a monster's turn
-    this.busy = true;
-    this.act(party[turn]).catch(e => log('Quickfight: ' + e.message)).finally(() => { this.busy = false; });
-  },
-  async act(pc) {
-    const b = await Api.read(BIOS_HEAD, 4);
-    if ((b[0] | b[1] << 8) !== (b[2] | b[3] << 8)) return;   // the game hasn't taken the last keys yet
-    const all = Game.combatants(), me = all.find(u => u.active), foes = all.filter(u => !u.pc && u.hp > 0);
-    if (!me || !foes.length) return;
-    const dist = u => Math.max(Math.abs(u.x - me.x), Math.abs(u.y - me.y));
-    const foe = foes.reduce((a, u) => dist(u) < dist(a) ? u : a);
-    const dx = foe.x - me.x, dy = foe.y - me.y, d = dist(foe);
-    const dirKey = (x, y) => x > 0 ? KEYS.right : x < 0 ? KEYS.left : y > 0 ? KEYS.down : KEYS.up;
-    const range = this.range(pc.eq[2]);
-    if (Math.abs(dx) + Math.abs(dy) === 1) {
-      log(`Quickfight: ${pc.name} attacks the monster at ${foe.x},${foe.y}`);
-      await this.keys(KEYS.a, dirKey(dx, dy));
-    } else if (range > 1 && d <= range) {
-      log(`Quickfight: ${pc.name} shoots at ${foe.x},${foe.y}`);
-      await pushKey(...KEYS.a);
-      for (let t = 0; t < 20 && (await Api.read(Game.base + SAVE + 0x2F2, 1))[0] !== 1; t++) await sleep(50);
-      if (Settings.v.qfAim) await Api.write(Game.base + SAVE + 0x2F3, Uint8Array.of(foe.x, foe.y));
-      else {
-        const keys = [];
-        for (let k = 0; k < Math.abs(dx); k++) keys.push(dirKey(dx, 0));
-        for (let k = 0; k < Math.abs(dy); k++) keys.push(dirKey(0, dy));
-        await this.keys(...keys);
-      }
-      await this.keys(KEYS.enter);
-    } else {
-      // step towards it along the longer axis; if that didn't move us last time, the other one
-      const blocked = this.last && this.last.i === me.i && this.last.x === me.x && this.last.y === me.y;
-      const longX = Math.abs(dx) >= Math.abs(dy), useX = blocked ? !this.last.useX : longX;
-      const key = useX && dx ? dirKey(dx, 0) : dy ? dirKey(0, dy) : dirKey(dx, 0);
-      this.last = { i: me.i, x: me.x, y: me.y, useX };
-      log(`Quickfight: ${pc.name} moves towards ${foe.x},${foe.y}`);
-      await this.keys(key);
+    const cb = Game.combat();
+    let job;
+    if (cb.hostiles === 0 && Game.save[0x2F2] === 0)
+      job = this.reequipAll().then(() => { log(''); log('No hostile creatures found! Stopped quickfight.'); this.stop(true); });
+    else {
+      const me = cb.units[cb.active];
+      if (!me || !me.friendly) return;
+      job = this.act(cb, me);
     }
+    this.busy = true;
+    job.catch(e => log('Quickfight: ' + e.message)).finally(() => { this.busy = false; });
+  },
+  async act(cb, me) {
+    const b = await Api.read(BIOS_HEAD, 4);
+    if ((b[0] | b[1] << 8) !== (b[2] | b[3] << 8)) return;   // the game hasn't taken the last key yet
+    const s = Game.save, idx = me.i, rec = 2 + idx * 32, name = me.name;
+    let noWeapon = true, ranged = false, range = 0;
+    for (const off of [0x1B, 0x1C, 0x1D]) {
+      const it = s[rec + off];
+      if (it >= 0x10 && it < 0x2A) noWeapon = false;
+      if (RANGED.has(it)) { ranged = true; range = Math.max(range, this.range(it)); }
+      else if (REACH.has(it)) range = Math.max(range, this.range(it));
+    }
+    log(`${name}: At ${pad2(me.x)},${pad2(me.y)}, armed with ${this.armedWith(rec)}.`);
+    const aiming = s[0x2F2] === 1;
+    let aimRange = 0;
+    if (aiming) {
+      const w = s[0x2F7];
+      if (w >= 0x10 && w < 0x2A) aimRange = range = this.range(w);
+      else if (w === 3 || w === 6) aimRange = range = 1;
+      if (w !== 0) log(`${name}: In aim-mode with weapon ${this.itemName(w)} (range ${aimRange}).`);
+    }
+    const adj = this.adjacent(cb, me);
+    if (adj) {
+      if (noWeapon || ranged) {
+        log(`${name}: Needs to equip a melee weapon.`);
+        if (await this.equip(idx, EQUIP_PREF)) return;
+      }
+      log(`${name}: Plans to attack ${adj.name} at ${pad2(adj.x)},${pad2(adj.y)}.`);
+      if (!aiming) { log(`${name}: Sending keypress [A].`); await this.key('a'); }
+      else await this.aim(name, adj, true);
+      return;
+    }
+    const spiral = this.spiral(me.x, me.y, 11);
+    this.distances(cb, me);
+    if (range > 1) {
+      const t = this.inRange(cb, spiral, me, range);
+      if (t) {
+        log(`${name}: Plans to shoot ${t.name} at ${pad2(t.x)},${pad2(t.y)}.`);
+        if (!aiming) { log('Sending keypress [A].'); await this.key('a'); }
+        else await this.aim(name, t, aimRange > 0);
+        return;
+      }
+    }
+    if (aiming) { log(`${name}: Crosshair active but can not find a target! Sending keypress [SPACE].`); await this.key('space'); return; }
+    const walk = this.reachable(cb, spiral);
+    if (walk) {
+      const d = dirTo(me.x, me.y, walk.sx, walk.sy);
+      log(`${name}: Plans to move towards ${walk.name} at ${pad2(walk.x)},${pad2(walk.y)}. Sending keypress [${DIR_NAME[d]}].`);
+      await this.key(DIR_KEY[d]);
+      return;
+    }
+    if (!ranged && await this.equip(idx, RANGED_PREF)) return;
+    const far = this.inRange(cb, spiral, me, 20);
+    if (far) {
+      const d = this.stepDir(cb, me, far);
+      if (d) {
+        log(`${name}: All creatures are out of range. Moving towards ${far.name} at ${pad2(far.x)},${pad2(far.y)}. Sending keypress [${DIR_NAME[d]}].`);
+        await this.key(DIR_KEY[d]);
+        return;
+      }
+    }
+    log(`${name}: Can not reach any opponent! Sending keypress [SPACE].`);
+    await this.key('space');
+  },
+  // brings the crosshair (2F3/2F4) onto the target and fires: Enter when it is there,
+  // a step with an arrow key, or straight there when insta-aiming is on and allowed
+  async aim(name, t, instaOk) {
+    const s = Game.save, cx = s[0x2F3], cy = s[0x2F4];
+    if (cx === t.x && cy === t.y) {
+      log(`${name}: Crosshair at target ${pad2(cx)},${pad2(cy)}. Sending keypress [ENTER].`);
+      await this.key('enter'); return;
+    }
+    if (Settings.v.qfAim && instaOk) {
+      log(`${name}: Insta-aiming crosshair to ${pad2(t.x)},${pad2(t.y)} and sending keypress [ENTER].`);
+      await Game.writeSave(0x2F3, [t.x, t.y]);
+      await this.key('enter'); return;
+    }
+    const d = dirTo(cx, cy, t.x, t.y), nx = cx + DIR[d][0], ny = cy + DIR[d][1];
+    log(`${name}: Moving crosshair from ${pad2(cx)},${pad2(cy)} to ${pad2(nx)},${pad2(ny)}. Sending keypress [${DIR_NAME[d]}].`);
+    await this.key(DIR_KEY[d]);
+  },
+  // the neighbour (eight directions) with the fewest hit points that isn't friendly
+  adjacent(cb, me) {
+    let best = null;
+    for (const [dx, dy] of NEAR8) {
+      const x = me.x + dx, y = me.y + dy;
+      if (!inMap(x, y)) continue;
+      const c = cb.cells[y * 11 + x];
+      if (c.friendly || c.hp <= 0) continue;
+      if (!best || c.hp < best.hp) best = { x, y, hp: c.hp, name: c.name };
+    }
+    return best;
+  },
+  // the cells around (cx, cy) ring by ring, each ring clockwise from its top left corner
+  spiral(cx, cy, n) {
+    const out = [], add = (x, y) => { if (inMap(x, y) && out.length < 122) out.push([x, y]); };
+    for (let r = 1; r <= n; r++) {
+      let x = cx - r, y = cy - r;
+      for (let k = -r; k <= r; k++) { add(x, y); if (k < r) x++; else y++; }
+      for (let k = 1 - r; k <= r; k++) { add(x, y); if (k < r) y++; else x--; }
+      for (let k = 1 - r; k <= r; k++) { add(x, y); if (k < r) x--; else y--; }
+      for (let k = 1 - r; k <= r - 1; k++) { add(x, y); if (k < r) y--; }
+    }
+    return out;
+  },
+  // every walkable cell's ring distance from the unit (0 where nobody can walk)
+  distances(cb, me) {
+    for (const c of cb.cells) c.dist = 0;
+    const set = (x, y, r) => { if (inMap(x, y) && cb.cells[y * 11 + x].walk) cb.cells[y * 11 + x].dist = r; };
+    for (let r = 0; r < 12; r++) {
+      for (let x = me.x - r; x <= me.x + r; x++) { set(x, me.y - r, r); set(x, me.y + r, r); }
+      for (let y = me.y - r; y <= me.y + r; y++) { set(me.x - r, y, r); set(me.x + r, y, r); }
+    }
+  },
+  // the first unit along the spiral that isn't friendly and lies within the range
+  inRange(cb, spiral, me, range) {
+    for (const [x, y] of spiral) {
+      const c = cb.cells[y * 11 + x];
+      if (c.hp > 0 && !c.friendly && round(Math.hypot(x - me.x, y - me.y)) <= range) return { x, y, name: c.name };
+    }
+    return null;
+  },
+  // the first unit along the spiral a path leads to: it walks from the unit towards us
+  // over walkable cells by falling ring distance, and the cell next to us it ends on
+  // is where we step to
+  reachable(cb, spiral) {
+    const me = cb.units[cb.active];
+    for (const [x, y] of spiral) {
+      const c = cb.cells[y * 11 + x];
+      if (c.hp <= 0 || c.friendly) continue;
+      const step = this.walk(cb, x, y, me.x, me.y);
+      if (step) return { x, y, name: c.name, sx: step[0], sy: step[1] };
+    }
+    return null;
+  },
+  walk(cb, fx, fy, tx, ty) {
+    if (!inMap(fx, fy) || !inMap(tx, ty)) return null;
+    const seen = new Uint8Array(121);
+    let x = fx, y = fy;
+    while (!this.nextTo(x, y, tx, ty)) {
+      let best = 0, bestDist = 0;
+      for (let d = 1; d <= 4; d++) {
+        const nx = x + DIR[d][0], ny = y + DIR[d][1];
+        if (!inMap(nx, ny) || seen[ny * 11 + nx]) continue;
+        const dist = cb.cells[ny * 11 + nx].dist;
+        if (dist > 0 && (dist < bestDist || best === 0)) { bestDist = dist; best = d; }
+      }
+      if (!best) return null;
+      x += DIR[best][0]; y += DIR[best][1];
+      seen[y * 11 + x] = 1;
+    }
+    return [x, y];
+  },
+  nextTo(x, y, tx, ty) {
+    for (let d = 1; d <= 4; d++) if (x + DIR[d][0] === tx && y + DIR[d][1] === ty && inMap(tx, ty)) return d;
+    return 0;
+  },
+  // a step towards the target along the longer axis first, onto a walkable cell
+  stepDir(cb, me, t) {
+    const walk = (x, y) => inMap(x, y) && cb.cells[y * 11 + x].walk;
+    const vert = [[me.y < t.y, me.x, me.y + 1, 3], [me.y > t.y, me.x, me.y - 1, 1]];
+    const horz = [[me.x < t.x, me.x + 1, me.y, 2], [me.x > t.x, me.x - 1, me.y, 4]];
+    for (const [ok, x, y, d] of Math.abs(me.x - t.x) < Math.abs(me.y - t.y) ? [...vert, ...horz] : [...horz, ...vert])
+      if (ok && walk(x, y)) return d;
+    return 0;
+  },
+  // puts the first pair (weapon, off-hand) of the list into the character's hands that
+  // the party owns (bows want arrows, crossbows quarrels), moving the items between the
+  // hands and the inventory; true when it did, or when the hands already hold that pair
+  async equip(idx, list) {
+    const s = Game.save, rec = 2 + idx * 32, have = [s[rec + 0x1B], s[rec + 0x1C]], name = Game.recordName(rec);
+    const inv = it => s[0x21A + it];
+    for (const want of list) {
+      if (want[0] === have[0] && want[1] === have[1]) return true;
+      const ok = want.every((w, k) => w === have[k] || w === 0xFF
+        || (inv(w) > 0 && !((w === 0x1A || w === 0x24) && !inv(0x1B)) && !(w === 0x1C && !inv(0x1D))));
+      if (!ok) continue;
+      for (let k = 0; k < 2; k++) {
+        if (want[k] === have[k]) continue;
+        if (have[k] !== 0xFF) await Game.writeSave(0x21A + have[k], [inv(have[k]) + 1]);
+        if (want[k] !== 0xFF) await Game.writeSave(0x21A + want[k], [inv(want[k]) - 1]);
+        await Game.writeSave(rec + 0x1B + k, [want[k]]);
+      }
+      const n = want.map(w => this.itemName(w));
+      if (want[0] === 0xFF) { if (want[1] !== 0xFF) log(`${name}: Equips ${n[1]}.`); }
+      else log(want[1] === 0xFF ? `${name}: Equips ${n[0]}.` : `${name}: Equips ${n[0]} / ${n[1]}.`);
+      return true;
+    }
+    return false;
+  },
+  // when the fight is over: everyone back to their best melee gear
+  async reequipAll() { for (let i = 0; i < Math.min(6, Game.partySize); i++) await this.equip(i, EQUIP_PREF); },
+  // "armed with ..." as the original puts it: the hands, and a spiked helm counts
+  armedWith(rec) {
+    const s = Game.save, parts = [];
+    if (s[rec + 0x19] === 0xFF && s[rec + 0x1B] === 0xFF && s[rec + 0x1C] === 0xFF) return 'bare hands';
+    if (s[rec + 0x19] === 3) parts.push(HUD_ITEMS[3]);
+    for (const off of [0x1B, 0x1C]) {
+      const it = s[rec + off];
+      if (it >= 0x10 && it < 0x2A) { const r = this.range(it); parts.push(HUD_ITEMS[it] + (r > 0 ? ` (range ${r})` : '')); }
+      else if (it < 0x30) parts.push(HUD_ITEMS[it]);
+    }
+    return parts.join(' / ');
   },
 };
 
 /* --------------------------------------------------- debug actions */
 
-// like the original: the position, and on the world maps the 2x2 chunks the
-// game keeps in memory (DS:6618, chunk order) with their origin at 2F5/2F6
+// the original's teleport (debug mode, Ctrl + click): the position, and on the large maps
+// the 2x2 chunks around it as the game keeps them in memory (DS:6618, chunk by chunk,
+// their origin at 2F5/2F6); in a small map not onto a unit's cell; in combat it moves
+// the party member whose turn it is onto a free cell
 async function teleport(c) {
-  if (!Settings.v.debug) { log('Teleporting needs debug mode (Ctrl+D)'); return; }
-  await Game.writeSave(0x2F0, [c.x, c.y]);
-  const area = Game.area();
+  if (!Settings.v.debug || !Game.save) return;
+  const s = Game.save, area = Game.area(), x = c.x, y = c.y;
   if (area === 'world' || area === 'under') {
-    const ox = c.x & 0xF0, oy = c.y & 0xF0, m = U5.large(area === 'under'), buf = new Uint8Array(1024);
-    for (let ch = 0; ch < 4; ch++) for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++)
-      buf[ch * 256 + y * 16 + x] = m[((oy + (ch >> 1) * 16 + y) & 255) * 256 + ((ox + (ch & 1) * 16 + x) & 255)];
+    if (x > 255 || y > 255) return;
+    await Game.writeSave(0x2F0, [x, y]);
+    const ox = chunkOrigin(x), oy = chunkOrigin(y), m = U5.large(area === 'under'), buf = new Uint8Array(1024);
     await Game.writeSave(0x2F5, [ox, oy]);
+    let k = 0;
+    for (const [bx, by] of [[ox, oy], [ox + 16, oy], [ox, oy + 16], [ox + 16, oy + 16]])
+      for (let yy = by; yy < by + 16; yy++) for (let xx = bx; xx < bx + 16; xx++) buf[k++] = xx < 256 && yy < 256 ? m[yy * 256 + xx] : 0;
     await Api.write(Game.base + MAPBUF, buf);
+    Render.lens = false;
+  } else if (area === 'small') {
+    if (x > 31 || y > 31) return;
+    for (let i = 0; i < 32; i++) { const u = Game.unit(i); if (u.x === x && u.y === y) return; }
+    await Game.writeSave(0x2F0, [x, y]);
+  } else if (area === 'dungeon') {
+    if (x > 7 || y > 7) return;
+    await Game.writeSave(0x2F0, [x, y]);
+  } else {
+    const cb = Game.combat(), idx = cb.active;
+    if (x > 10 || y > 10 || idx > Game.partySize - 1 || !cb.cells[y * 11 + x].walk) return;
+    await Game.writeSave(0x6B4 + idx * 8 + 2, [x, y]);
+    await Api.write(Game.base + COMBAT_UNITS + idx * 8 + 6, Uint8Array.of(x, y));
   }
-  log(`Teleported to ${pad3(c.x)},${pad3(c.y)}`);
+  log(`Teleported to ${pad3(x)},${pad3(y)}`);
 }
 
+// the original's: the hour (2D9 and its copy at 2DA) one on, round the clock
 async function forwardTime() {
   if (!Game.save) return;
-  const s = Game.save;
-  let hour = s[0x2D9] + 1, day = s[0x2D8], month = s[0x2D7], year = s[0x2CE] | s[0x2CF] << 8;
-  if (hour > 23) {
-    hour = 0; day++;
-    if (day > 28) { day = 1; month++; }
-    if (month > 13) { month = 1; year++; }
-    await Game.writeSave(0x2CE, [year & 255, year >> 8]);
-    await Game.writeSave(0x2D7, [month, day]);
-  }
-  await Game.writeSave(0x2D9, [hour, hour]);
-  log(`Time is now ${hour}:${String(s[0x2DB]).padStart(2, '0')}, ${month}-${day}-${year}`);
+  let h = Game.save[0x2D9] + 1;
+  if (h > 23) h = 0;
+  await Game.writeSave(0x2D9, [h, h]);
+  log(`Time is now ${pad2(h)}:${pad2(Game.save[0x2DB])}`);
 }
 
-// what the original writes: 1 at 2FD, which lets Esc at the combat prompt
-// escape (dungeon rooms excepted); then Esc goes into the keyboard buffer
+// what the original does: 1 at 2FD, which lets Esc at the combat prompt escape (dungeon
+// rooms excepted), then half a second later Esc
 async function exitCombat() {
-  if (!Game.save || Game.area() !== 'combat') { log('Exit combat: not in combat'); return; }
+  if (!Game.save) return;
   await Game.writeSave(0x2FD, [1]);
+  await sleep(500);
   await pushKey(...KEYS.esc);
   log('Exit combat');
 }
@@ -1737,7 +2293,7 @@ function pickFolder() {
   const inp = $('#folderInput');
   inp.value = '';
   inp.onchange = async () => {
-    try { await Files.importList(inp.files); log('Game files imported'); Render.dirty = true; Render.draw(); }
+    try { await Files.importList(inp.files); log('Game files imported'); Render.draw(); }
     catch (e) { alert(e.message); }
   };
   inp.click();
@@ -1775,10 +2331,11 @@ async function backupSaves() {
     inp.click();
     return;
   }
-  const desc = prompt('Description for the backup (optional):', '') ?? null;
+  const desc = prompt('Backup save game\nEnter a description for the save game', '');
   if (desc === null) return;
   const entries = [];
-  for (const [n, f] of Object.entries(files)) entries.push([n, new Uint8Array(await f.arrayBuffer())]);
+  for (const n of SAVE_FILES) if (files[n]) entries.push([n, new Uint8Array(await files[n].arrayBuffer())]);
+  entries.push(['Explored.UM5', await Explored.file()]);   // the explored maps in the original's format
   const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
   download(zipStore(entries), `U5 save ${stamp}${desc ? ' ' + desc.replace(/[\\/:*?"<>|]/g, '') : ''}.zip`);
   Files.saveSnapshot = null;
@@ -1838,10 +2395,10 @@ const Help = {
       <p>A web version of Joonas Hirvonen's Ultimapper 5 for DOSBox Staging. It reads Ultima V's memory through
       DOSBox Staging's HTTP API.</p>
       <p><b>Map:</b> left click on the world map toggles the zoom view; right click opens the menu.
-      PgUp / PgDn change the size. In debug mode (Ctrl+D), Ctrl+click teleports.</p>
-      <p><b>HUD:</b> click a name to edit that character; click the clock area for the spell list,
-      right-click it for the inventory. In the spell list, Tab or right-click switches lists and a click or
-      Enter mixes one spell.</p>
+      PgUp / PgDn change the size. In debug mode (Ctrl+D), Ctrl+click teleports. A click while quickfight runs
+      stops it.</p>
+      <p><b>HUD:</b> click the clock area for the spell list, right-click it for the inventory. In the spell list,
+      Tab or right-click switches lists and a click or Enter mixes one spell. The editor is in the Debug menu.</p>
       <p><b>Keys:</b> S spells, I inventory, Q quickfight, Ctrl+E editor, Ctrl+T forward time, Ctrl+L log,
       Ctrl+S backup, Esc closes a window.</p>`;
   },
