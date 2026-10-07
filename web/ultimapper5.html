@@ -54,33 +54,23 @@ input[type=number] { width: 70px; }
 .list tr.na td { color: var(--dim); }
 .list tr:hover td { background: #1d2a3d; }
 .n { text-align: right !important; }
-.list.spells { font: 11px Verdana, Tahoma, sans-serif; }
-.list.spells th { background: #222222; color: #888888; font-size: 10px; }
-.list.spells .c { text-align: center; }
-.list.spells tr.counts td { color: #888888; padding: 6px 6px 8px; }
-.list.spells tr.known td { color: #AAAAAA; }
-.list.spells tr.na td { color: #444444; }
-.list.spells tr.sel td { background: #222266; }
-.list.spells tr.sel.known td { color: #CCCCCC; }
-.list.spells tr.sel.na td { color: #888888; }
-.list.spells td.mix, .list.spells td.got { color: #228822 !important; }
-.list.spells td.miss { color: #882222 !important; }
-.list.spells td.dash { color: #444444 !important; }
-.list.spells tr { cursor: pointer; }
-.inv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 24px; font: 11px Verdana, Tahoma, sans-serif;
-  color: #888888; padding: 4px 8px 10px; }
-.inv h4 { color: #888888; font-size: 11px; font-weight: normal; margin: 16px 0 8px; }
-.inv div > div { display: flex; gap: 8px; line-height: 18px; }
-.inv .n { width: 18px; text-align: right; }
-.inv .got { color: #CCCCCC; }
-.inv .dash { color: #444444; }
-.inv .note { color: #555555; }
-#log { font: 12px/1.3 Consolas, monospace; white-space: pre-wrap; }
+#log { font: 13px Consolas, monospace; white-space: pre-wrap; color: #aaaaaa; background: #000; min-height: 100%; }
 .grid2 { display: grid; grid-template-columns: auto auto; gap: 4px 10px; align-items: center; }
-.ed { display: grid; grid-template-columns: 220px 1fr; gap: 10px; }
-.ed .chars button { display: block; width: 100%; text-align: left; margin-bottom: 3px; }
-.ed .chars button.sel { background: var(--sel); }
-.ed label { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 3px; }
+/* the editor: the original's form (817 x 544, its colours and fonts) */
+.edf { position: relative; width: 817px; height: 544px; background: #aaa; color: #000; font: 13px Tahoma, Verdana, sans-serif; user-select: none; }
+.edf > *, .edf .eg > * { position: absolute; box-sizing: border-box; margin: 0; }
+.edf .el { white-space: nowrap; line-height: 16px; text-align: right; }
+.edf input[type=text], .edf select { font: 13px Tahoma, Verdana, sans-serif; background: #ccc; color: #000; border: 1px solid #666; border-radius: 0; padding: 0 2px; }
+.edf button { font: 13px Tahoma, Verdana, sans-serif; background: #d4d0c8; color: #000; border: 1px solid #555; padding: 0; }
+.edf button:disabled { color: #888; }
+.edf .eg { border: 1px solid #777; box-shadow: 1px 1px #eee, inset 1px 1px #eee; }
+.edf .eg .egt { left: 8px; top: -9px; padding: 0 1px; background: #aaa; white-space: pre; }
+.edf .ec { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.edf .ec input { margin: 0; }
+.edf .elb { background: #ccc; border: 1px solid #666; overflow-y: auto; overflow-x: hidden; }
+.edf .elb > div { height: 16px; line-height: 16px; padding: 0 2px; white-space: pre; cursor: default; }
+.edf .elb > div.sel { background: #0a246a; color: #fff; }
+.edf .elb.mono > div { font: 15px Consolas, monospace; height: 18px; line-height: 18px; }
 .muted { color: #888; }
 .hidden { display: none !important; }
 a { color: #8ab4f8; }
@@ -130,6 +120,124 @@ const pad2 = n => String(n).padStart(2, '0');
 const round = v => { const f = Math.floor(v), d = v - f; return d > 0.5 ? f + 1 : d < 0.5 ? f : f % 2 ? f + 1 : f; };
 const pt = size => Math.round(size * 4 / 3);
 const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+
+/* Text placed the way the original's (GDI) canvas places it: TextOut(x, y) has the top
+ * of the character cell at y and the baseline tmAscent below it, each character
+ * GDI's advance width after the one before (no kerning); TextHeight is the cell's
+ * height (tmAscent + tmDescent), TextWidth the sum of the advances.  GDI_FONTS holds
+ * GDI's ascents, descents and widths (characters 32-126, each as code - 32) of the
+ * fonts at pixel heights 5 to 40 (lfHeight = -px), measured on Windows
+ * (tools/gen_web_tables.py --fonts). */
+/*@GDI_FONTS@*/
+const GDI_FONTS = {
+  "Verdana": { a: [5, 6, 7, 8, 10, 10, 11, 12, 13, 14, 15, 15, 17, 18, 19, 21, 21, 22, 23, 24, 26, 27, 27, 28, 29, 30, 32, 32, 33, 34, 35, 37, 38, 38, 39, 40], d: [1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8],
+    w: ["\"\"\"$#%$!\"\"#$\"\"\"\"##########\"\"$$$#%###$##$$\"\"##$$$#$###$#%###\"\"\"$#######\"##!\"#!%####\"#\"##$####\"#$",
+      "\"\"#%$&$\"##$%\"#\"#$$$$$$$$$$##%%%#&$$$%$#%%##$#%$%$%$$$$$&$$$###%$$$$#$$\"$$\"\"$\"&$$$$##\"$$%$$#$#$%",
+      "\"##&$(%\"##$&####$$$$$$$$$$##&&&$'%%%%$$%%##%$&%&$&%%$%%'%$%###&$$$$$$$\"$$\"\"$\"'$$$$#$#$$&$$$$#$&",
+      "##$'%)&\"$$%'#$#$%%%%%%%%%%$$'''$(%%&&%%&&#$&$'&&%&&%%&%(%%%$$$'%%%%$%%#%%\"#%\"(%%%%#$#%%'%%$%$%'",
+      "#%%''+'#$$''#%#$''''''''''$$'''&*('(('&((%%'&)()')'''(()'''$$$'&&&&&&&#&&##&#)&&&&$&$&&'&&%&%&'",
+      "$$%('+'#%%'($%$%''''''''''%%(((&*''((&&((%%'&)')')(''('+'''%%%(&&''%''$''##'#+''''$&$'&''&&&%&(",
+      "$$%)',(#%%')$%$%''''''''''%%)))&*(())'&)(%%(&)()')(('((+('(%%%)''''&''$''#$'#+''''%&$'')''&'%')",
+      "$%&*(-)#%%()$%$%((((((((((%%)))',(())('))%%('*)*(*((')(-('(%%%*((((&(($((#$'#+((((%'%('+'''(%(*",
+      "%%%*(-)#&&))%'%&((((((((((&&)))'-)())(())%&('+)*(*())))-)))&&&+(((((((%((#$'#+((((%'&((+'('('(+",
+      "%&&+)/*$&&)+%'%&))))))))))&&+++(.***+)(+*%&*(+*+(+**)**/*)*&&&+))()')(%))#%(#-))))&(&)(+)(()&)+",
+      "%&',*0+$''*,%'%'**********'',,,(/**++)),+%'*(-+,),**)+*/*)*''',**))())%))#%)#/)*))&(&))-)))*'*,",
+      "&&'-*1,$''*-&'&'**********''---)0+++,*),,''+)-,-*-+**,+1+++'''-****(**&**%&)%/****&)'*)-)))*'*-",
+      "&'(.+2,%((+.&(&(++++++++++((...)1,,,-+*--((,).--*-,,*,,1,*,(((.++*+)+*&++%&*%1+*++')'+*.**)+(+.",
+      "&'(/+3-%((+/'('(++++++++++((///*2,,-.+*..((,*/-.+.-,+-,2,+,(((/++++)++&++%&+%2++++()'++/++)+(+/",
+      "'')0,4.%)),0')'),,,,,,,,,,))000*3---/,+/.()-+0./+/--,.-3-,-)))0,,+,*,+',,&'+&2,,,,(*',+0++*,),0",
+      "'()0-6/%))-0')')----------))000+4.../-,0/().+1/0,0..,/.4.,.)))0--,,*,,',-&',&3-,,,)*(-,0,,+-)-0",
+      "'(*1-7/&**-1(*(*----------**111+5../0-,00(*/,201-1/.-/.5.-.***1----+--'--&',&4----)+(-,1,,+-*-1",
+      "()*2.80&**.2(*(*..........**222,6///1.-11**/,301-1//.0/6/./***2..-.+.-(..&(-&5.-..)+).-2--,.*.2",
+      "()+3/91&**/3(*(*//////////**333-70002/-21**0-312.200.1070.0***3//..,..(./&(.&6/...*,)/.3..,/*/3",
+      "()+4/:1&++/4)+)+//////////++444-80013/.32*+1-423.310/2080/0+++4//./-/.(//&(.&7////*-)/.4..-/+/4",
+      ")*+40;2'++04)+)+0000000000++444.911130.33*+1.534/411/2191/1+++400/0-0/)00&)/&80/00+-*0/4//-0+04",
+      ")*,51<3',,15),),1111111111,,555.:22240/44+,2.6340422032:202,,,51100.0/)00')/'90000+.*0/5//.1,15",
+      "*+,61=4',,16*,*,1111111111,,666/;23351054+,3/7450532142;313,,,61101.10*11')0':1011,.+10600.1,16",
+      "*+-72>4(--27*-*-2222222222--777/<33462065--308561633153<313---72211/11*12)*1);2111,/+21711/2-27",
+      "*+-82?5(--28+-+-2222222222--8880=44462166--408671744254=424---82212/21*22)*1)<2222,/+21811/2-28",
+      "+,.93@6(..39+.+.3333333333..9990>55573177-.519682855265>525...93323032+33)*2)=3233-0,3292203.39",
+      "+,.94A7(..49+.+.4444444444..9991?55684287-.51:783865375?535...94433032+34)+2)>4333-0,4292204.49",
+      "+-/:4B7)//4:,/,/4444444444//:::1@66694298-/62;893966476@646///:4434143+44)+3)?4344.1-43:3314/4:",
+      ",-/;5D8)//5;,/,/5555555555//;;;2A777953:9-/72<9:4:77487A747///;5545154,55)+4)@5455.1-54;4415/5;",
+      ",-0<6E9)//6<,/,/6666666666//<<<3B778:64:://83=9;5;87597B757///<6645254,56),4)A6555/2-64<4426/6<",
+      ",.0=6F9)006=-0-0666666666600===3C888;64;:/083>:<5<886:8C868000=6656265,66),5)B6566/2.65=552606=",
+      "-.1=7G:*007=-0-0777777777700===4D999<75<;/094>;<6<996:9D969000=7766365-67),5)C7666/3.75=553707=",
+      "-/1>8H;*118>-1-1888888888811>>>4E99:=75=<01:5?<=6=:97;9E979111>8867376-77*-6*D767703/76>663717>",
+      "-/1?8I<*118?.1.1888888888811???5F::;=86==01:5@<>7>::7<:F:7:111?8878487-88*-6*E878804/86?664818?",
+      "./2@9J<*229@.2.2999999999922@@@5G;;;>96>=02;6A=?8?;;8=;G;8;222@9978487.89,-7,F988814/97@774929@",
+      ".02A9K=+229A/2/2999999999922AAA6H;;<?97?>02<6B>?8?<;9=;H;9;222A9989598.99,.8,G989915098A885929A"] },
+  "Tahoma": { a: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40], d: [1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8],
+    w: ["\"\"\"$#%#!\"\"#$\"\"\"\"##########\"\"$$$\"%########\"\"#\"$#$#$#####%###\"\"\"$####\"##\"##!!\"!$####\"\"\"#\"$\"\"\"\"\"\"$",
+      "\"\"\"$#&$!\"\"#$\"\"\"\"##########\"\"$$$#%$$$$##$$\"#$#%$$#$$#$$$%###\"\"\"$#######\"##!\"#!%####\"#\"##$####\"#$",
+      "\"\"#%$'%!##$%\"#\"#$$$$$$$$$$\"\"%%%#&$$$%$$%%##$#%%%$%$$$%$&$$$###%$$$$#$$\"$$\"\"#\"&$$$$##\"$#%######%",
+      "###&$(%\"##$&\"#\"#$$$$$$$$$$##&&&$'%%%%$$%%##%$&%&$&%$%%%'%%$###&$$$$$$$#$$\"\"$\"'$$$$#$#$$&$$$$#$&",
+      "#\"$'&*&\"##&'####%%%%%%%%%%##'''$('&''&&''$$&$('(&(&&&''(%&%###'%%%%$%%#%%\"#%\"(%%%%#$#%&($&$$$$'",
+      "#\"$'&*'\"$$&'#$#$%%%%%%%%%%$$'''%)'&''&&''$$&%('(&(&&&'&*&&&$$$'%%%&%&%#&&\"#&\"(&&&&$$#&&(%&$%$%'",
+      "#$$(&+'\"$$&($$$$&&&&&&&&&&$$(((%*'&''&&''$%&%('(&('&&'&*&&&$$$(&&&&%&&$&&\"#%\"(&&&&$%$&&(&&%%$%(",
+      "$$%)',(#%%'($$$%''''''''''$$)))&+(''('&(($%'&)()')''(((,'('%%%)''&'&''$''\"#&\"*''''$%%'&*&&%&%&)",
+      "$$%)',)#%%(($%$%''''''''''%%)))&,('((''(($%'&*()')(((((,(''%%%)''''&''$''#$&#+''''%&$'&*&&&&&&)",
+      "$$&*(.)#%%(*$%$%((((((((((%%***'-(()*('))$&('*)*(*)(()(.(((%%%*(('('('$((\"$'\",((((%&%((*((&'%'*",
+      "%$&+(/*#&&(+%%%&((((((((((%%+++'.)))*((**&&)',*+(+)(**).)*(&&&+(((('((%((\"$'\"-((((%'%((*((''&'+",
+      "%$&,)0+#&&),%&%&))))))))))&&,,,(/+)*+)(++&')(,+,),*)*+*.)*)&&&,))()')(%))$%($.))))&'%)(,(('(&(,",
+      "%&',)1+$''),%&%'))))))))))&&,,,(/+**,*)++&'*(-+,),+)*+*/***''',))))())%))$%($.))))&(&)(-(((('(,",
+      "&&'-*2,$''*-%'%'**********&&---)0+++,*),,'(+).,-*-+*+,+0***'''-**)*(*)&**$%)$/****&(&*)-))()')-",
+      "&&(.*3-$''*.&'&'**********''...)1+++-+*--'(+)/--*-,++,+1+++'''.***+)+*&++$%)$0+*++'(&+).))()').",
+      "&'(/+4-$((+/&'&(++++++++++''///)2,,,.+*-.'(,*/-.+.,+,-,2,,+(((/++++)++&++%&*%1++++')'+*/**)*(*/",
+      "''(/+5.$((+/&(&(++++++++++''///*3---.,+..(),*0./,/-,,.-3,,,(((/+++,*,+',,%&*%2,+,,()',*0**)*(*/",
+      "'')0,5/%((,0'('(,,,,,,,,,,((000*4---/,+//()-+1/0,0.,-.-4--,(((0,,,,*,,',,%&+%2,,,,(*',+0++*+(+0",
+      "'()1-60%))-1'(')----------((111+5...0-,/0)*.+2/0-0.--/.5---)))1--,-+-,'--%&+%3-,--(*(-+1++*+)+1",
+      "((*1-70%))-1')')----------((111+6...0--00)*.,301-1/-.0.6..-)))1----+--(--%',%4----)+(-,2,,+,),1",
+      "((*2.81%**.2()(*..........))222,7///1.-11)*/,312.20./0/7/..***2..-.,.-(..&',&5....)+(.,3,,+,*,2",
+      "()*3.92%**.3()(*..........))333,80/02/.12*+/-412.20./107///***3....,..(./&'-&6/...),)/-3--,-*-3",
+      "()+4/:2&**/4(*(*//////////**444-90002/.22*+0-523/31/020800/***4//./,/.)//&(-&7////*,)/-4--,-*-4",
+      "))+4/;3&++/4(*(+//////////**444-911130/33*,0.634/4100219000+++4////-//)/0&(.&80///*-)0.5..,-+-4",
+      ")*,50<4&++05)+)+0000000000**555.:11140/34+,1.6350520131:110+++500/0-0/)00'(.'80000*-*0.6..-.+.5",
+      ")*,60=4&++06)+)+0000000000++666.;22241044+-2/7451531242;111+++60001.10*11'(/'91011+-*1/6//-.+.6",
+      "**,71>5',,17)+),1111111111++777/<32351055,-2/8561631243<221,,,71101.10*11')/':1111+.*1/7//./,/7",
+      "*+-71?6',,17*,*,1111111111++777/=33362156,-309572742353=322,,,71112/21*22')0';2122,.+20800./,/7",
+      "*+-82@6'--28*,*-2222222222,,8880>43463166,.309672742364>332---82212/21+22()0(<2222,/+20900/0-08",
+      "++.93A7'--39*,*-3333333333,,9990?44473277-.41:783853464?443---93323032+33(*1(=3233,/+31911/0-09",
+      "+,.93B8'--39+-+-3333333333,,9991@55584278-/51;793964475@444---93323032+34(*1(=4333-0,41:1101-19",
+      "+,.:4C8(..4:+-+.4444444444--:::1A65684388-/52<894964585@554...:4434143+44(*2(>4444-0,42;2201.1:",
+      ",,/;4D9(..4;+-+.4444444444--;;;2B66695399./62=9:4:75686A555...;4434143,45(*2(?5444-1,52;2202.2;",
+      ",-/<5E:(//5<,.,/5555555555--<<<2C767:549:.063=9;5;85697B665///<5545254,55)+3)@5555.1-53<3312/2<",
+      ",-0<5F:(//5<,.,/5555555555..<<<2C777:64::/073>:<6<867:7C766///<5546265,66)+3)A6566.1-63=3313/3<",
+      "--0=6G;(//6=,/,/6666666666..===3D888;65;;/184?;<6<967:8D776///=6656265-66)+4)B6666.2-64>4423/3="] },
+};
+/*@/GDI_FONTS@*/
+const Gdi = {
+  // a font of character height px; ascent and descent when GDI gives it others (a cell height
+  // that no character height has the same metrics for); cell: the cell height it was asked
+  // for (a positive lfHeight), when it was
+  font(g, px, face = 'Verdana', ascent, descent, cell) {
+    g.font = `${px}px ${face}`;
+    g.gdiFont = [face, px, ascent, descent, cell];
+  },
+  table(g) {
+    const [face, px] = g.gdiFont || ['Verdana', 16], m = GDI_FONTS[face], i = px - 5;
+    return m && i >= 0 && i < m.a.length ? [m, i] : [null, 0];
+  },
+  metrics(g) {
+    const f = g.gdiFont || ['', 16];
+    if (f[2] !== undefined) return [f[2], f[3]];
+    const [m, i] = this.table(g), px = f[1];
+    return m ? [m.a[i], m.d[i]] : [px, Math.round(px * 0.21)];
+  },
+  height(g) { const [a, d] = this.metrics(g); return a + d; },
+  charWidth(g, ch) {
+    const [m, i] = this.table(g), c = ch.charCodeAt(0);
+    return m && c >= 32 && c <= 126 ? m.w[i].charCodeAt(c - 32) - 32 : Math.round(g.measureText(ch).width);
+  },
+  width(g, s) { let w = 0; for (const ch of s) w += this.charWidth(g, ch); return w; },
+  text(g, s, x, y) {
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    const base = y + this.metrics(g)[0];
+    for (const ch of s) { g.fillText(ch, x, base); x += this.charWidth(g, ch); }
+  },
+  // the original's centred text (its 455E50): (w - width) div 2 and (h - height) div 2 in
+  centred(g, s, l, t, w, h) { this.text(g, s, l + Math.trunc((w - this.width(g, s)) / 2), t + Math.trunc((h - this.height(g)) / 2)); },
+};
 
 /* ---------------------------------------------------------------- API */
 
@@ -189,7 +297,7 @@ const DB = {
 const Settings = {
   v: { worldExplored: true, underworldExplored: false, townsExplored: true, dungeonsExplored: false,   // the original's defaults
        peerExplore: true, worldTitles: true, underworldTitles: false, npcNames: true, partyLocation: true,
-       autoLevelUp: false, qfInterval: 400, qfAim: true, debug: false, size: 0, hud: true },
+       autoLevelUp: false, qfInterval: 400, qfAim: true, debug: false, debugLog: false, size: 0, hud: true },
   load() { try { Object.assign(this.v, JSON.parse(localStorage.getItem('um5.settings') || '{}')); } catch {} },
   save() { try { localStorage.setItem('um5.settings', JSON.stringify(this.v)); } catch {} },
 };
@@ -206,6 +314,7 @@ const MANUALS = { manual: 'manual.pdf', ref: 'Ultima 5 reference card.pdf', lore
 const Files = {
   data: {},          // name (upper case) -> Uint8Array
   pdfs: new Set(),   // the manuals that were in the game folder
+  pdfUrls: {},       // ... and where the webserver has them (?data=)
   async loadCached() {
     for (const n of DATA_FILES) {
       const b = await DB.get('files', n);
@@ -215,9 +324,50 @@ const Files = {
     return this.ok();
   },
   ok() { return ['TILES.16', 'BRIT.DAT', 'UNDER.DAT', 'TOWNE.DAT', 'DATA.OVL'].every(n => this.data[n]); },
+  /* The character's name in the game folder's SAVED.GAM (10 characters from offset 2), which
+   * the original reads when it finds the game and after a character was created: while
+   * the game in memory has another name, it shows its "does not match" message.  null when
+   * the file can't be read. */
+  saveName: null, base: null,
+  // a file of the game folder as it is now: from the webserver (?data=), or the folder
+  // chosen in the browser (a snapshot: null once the file changed)
+  async readNow(name) {
+    try {
+      if (this.base) {
+        for (const n of [name, name.toLowerCase(), name[0] + name.slice(1).toLowerCase()]) {
+          const r = await fetch(this.base + encodeURIComponent(n), { cache: 'no-store' });
+          if (r.ok) return new Uint8Array(await r.arrayBuffer());
+        }
+      } else if (this.saveSnapshot && this.saveSnapshot[name]) {
+        return new Uint8Array(await this.saveSnapshot[name].arrayBuffer());
+      }
+    } catch { }
+    return null;
+  },
+  async readSave() { const b = await this.readNow('SAVED.GAM'); return b && b.length >= 12 ? b : null; },
+  async readSaveName() {
+    const b = await this.readSave();
+    if (!b) { this.saveName = null; return null; }
+    let s = '';
+    for (let k = 2; k < 12 && b[k]; k++) s += String.fromCharCode(b[k]);
+    this.saveName = s;
+    return b;
+  },
+  // the original's Explored.UM5, taken over once per version (its size and contents)
+  async importExplored() {
+    const f = await this.readNow('EXPLORED.UM5');
+    if (!f || f.length < 0x49000) return;
+    let h = 0;
+    for (let i = 0; i < f.length; i++) h = (h * 31 + f[i]) | 0;
+    const sig = `${f.length}:${h}`;
+    if ((await DB.get('kv', 'imported:explored.um5')) === sig) return;
+    await Explored.store(f);
+    await DB.put('kv', 'imported:explored.um5', sig);
+  },
   // ?data=<folder>: the game files from a folder the webserver serves (relative to this page)
   async importUrl(base) {
     if (!base.endsWith('/')) base += '/';
+    this.base = base;
     const got = async name => {
       for (const n of [name, name.toLowerCase(), name[0] + name.slice(1).toLowerCase()]) {
         const r = await fetch(base + encodeURIComponent(n), { cache: 'no-store' });
@@ -232,6 +382,12 @@ const Files = {
       await DB.put('files', n, b);
     }
     if (!this.data['TILES.16']) throw new Error(`No Ultima V files at ${base}`);
+    // the manuals the original's menu offers when they are in the game folder
+    this.pdfs.clear(); this.pdfUrls = {};
+    for (const [key, name] of Object.entries(MANUALS)) {
+      const url = base + encodeURIComponent(name);
+      if ((await fetch(url, { method: 'HEAD', cache: 'no-store' }).catch(() => null))?.ok) { this.pdfs.add(key); this.pdfUrls[key] = url; }
+    }
     U5.reset();
   },
   async importList(fileList) {
@@ -255,6 +411,8 @@ const Files = {
     }
     this.saveSnapshot = {};
     for (const n of SAVE_FILES) { const f = top.get(n); if (f) this.saveSnapshot[n] = f; }
+    if (top.get('EXPLORED.UM5')) this.saveSnapshot['EXPLORED.UM5'] = top.get('EXPLORED.UM5');
+    this.base = null;
     U5.reset();
   },
 };
@@ -298,11 +456,6 @@ const SHORT = { 'Cloth Armour': 'Cloth', 'Leather Armour': 'Leather', 'Scale Mai
   'Protection Ring': 'Prot. Ring', 'Regeneration Ring': 'Regen. Ring', 'Amulet of Turning': 'Amulet of Turn.',
   'Jewelled Shield': 'Jewel Shield', 'Jewelled Sword': 'Jewel Sword' };
 const SLOTS = ['Helmet', 'Armor', 'Weapon', 'Shield', 'Ring', 'Amulet'];   // the HUD's names for empty slots
-const CLASSES = { 0x41: 'Avatar', 0x42: 'Bard', 0x46: 'Fighter', 0x4D: 'Mage' };
-const STATUS = { 0x47: 'Good', 0x50: 'Poisoned', 0x43: 'Charmed', 0x53: 'Asleep', 0x44: 'Dead', 0x52: 'Rat',
-  0x49: 'Invisible' };
-const REAGENTS = ['Sulphurous Ash', 'Ginseng', 'Garlic', 'Spider Silk', 'Blood Moss', 'Black Pearl',
-  'Nightshade', 'Mandrake Root'];
 // [name, circle, reagent mask (bit 0 = ash ... bit 7 = mandrake), effect] in SAVED.GAM order
 // (reagents from Ultima5Redux's spell list, effects as the original names
 // them; tools/gen_web_tables.py)
@@ -359,35 +512,6 @@ const SPELLS = [
 /*@/SPELLS@*/
 const SCROLLS = ['Vas Lor', 'Rel Hur', 'In Sanct', 'In An', 'In Quas Wis', 'Kal Xen Corp', 'In Mani Corp', 'An Tym'];
 const POTIONS = ['Blue', 'Yellow', 'Red', 'Green', 'Orange', 'Purple', 'Black', 'White'];
-const SPECIAL = [[0x206, 'Keys'], [0x207, 'Gems'], [0x208, 'Torches'], [0x209, 'Grapple', 1],
-  [0x20A, 'Magic Carpets'], [0x20B, 'Skull Keys'], [0x20D, 'Amulet of Lord British', 1],
-  [0x20E, 'Crown of Lord British', 1], [0x20F, 'Sceptre of Lord British', 1], [0x210, 'Shard of Falsehood', 1],
-  [0x211, 'Shard of Hatred', 1], [0x212, 'Shard of Cowardice', 1], [0x214, 'Spyglass'],
-  [0x215, 'HMS Cape Plans', 1], [0x216, 'Sextant'], [0x217, 'Pocket Watch', 1], [0x218, 'Black Badge', 1],
-  [0x219, 'Sandalwood Box', 1]];
-// the original's inventory window: three columns of groups, [title, [[save offset, name, note]...]]
-const INVENTORY = (() => {
-  const eq = (from, names) => names.map((n, k) => [0x21A + from + k, n]);
-  const armour = ['Cloth', 'Leather', 'Ring Mail', 'Scale', 'Chain', 'Plate', 'Mystic Armor'];
-  const weapons = ['Dagger', 'Sling', 'Club', 'Flaming Oil', 'Main Gauche', 'Spear', 'Throwing Axe', 'Short Sword', 'Mace',
-    'Morning Star', 'Bow', 'Arrows', 'Crossbow', 'Quarrels', 'Long Sword', '2H Hammer', '2H Axe', '2H Sword', 'Halberd',
-    'Chaos Sword', 'Magic Bow', 'Silver Sword', 'Magic Axe', 'Glass Sword', 'Jeweled Sword', 'Mystic Sword'];
-  const quest = [[0x209, 'Grapple'], [0x20A, 'Magic carpet'], [0x214, 'Spy glass'], [0x215, 'HMS Cape plans'],
-    [0x216, 'Sextant'], [0x217, 'Pocket watch'], [0x218, 'Black Badge'], [0x20D, 'Amulet of Lord British'],
-    [0x20E, 'Crown of Lord British'], [0x20F, 'Sceptre of Lord British'], [0x212, 'Shard of Cowardice'],
-    [0x210, 'Shard of Falsehood'], [0x211, 'Shard of Hatred'], [0x219, 'Sandalwood Box']];
-  const scrolls = [['Vas Lor', 'Light'], ['Rel Hur', 'Change Wind'], ['In Sanct', 'Protection'], ['In An', 'Negate Magic'],
-    ['In Quas Wis', 'Peer Map'], ['Kal Xen Corp', 'Summon Daemon'], ['In Mani Corp', 'Resurrect'], ['An Tym', 'Time Stop']];
-  const potions = [['Blue', 'Awaken'], ['Yellow', 'Heal'], ['Red', 'Cure Poison'], ['Green', 'Poison'], ['Orange', 'Sleep'],
-    ['Purple', 'Rat'], ['Black', 'Invisibility'], ['White', 'X-Ray']];
-  const reagents = ['Sulfur Ash', 'Ginseng', 'Garlic', 'Spider Silk', 'Blood Moss', 'Black Pearl', 'Nightshade', 'Mandrake Root'];
-  return [
-    [['HELMETS', eq(0, ITEMS.slice(0, 4))], ['SHIELDS', eq(4, ITEMS.slice(4, 9))], ['ARMOR', eq(9, armour)],
-      ['QUEST ITEMS', quest]],
-    [['WEAPONS', eq(16, weapons)], ['RINGS', eq(42, ITEMS.slice(42, 45))], ['AMULETS', eq(45, ITEMS.slice(45, 48))]],
-    [['SCROLLS', scrolls.map(([n, e], k) => [0x27A + k, n, e])], ['POTIONS', potions.map(([n, e], k) => [0x282 + k, n, e])],
-      ['REAGENTS', reagents.map((n, k) => [0x2AA + k, n])]]];
-})();
 const REAGENT_ABBR = ['ash', 'gin', 'gar', 'sil', 'mos', 'prl', 'nig', 'man'];
 const LEVEL_XP = [0, 100, 200, 400, 800, 1600, 3200, 6400];   // XP needed for level n+1
 
@@ -601,7 +725,7 @@ function buildNpcNames() {
       const rec = npc.subarray(i * 0x240, (i + 1) * 0x240), list = {};
       for (let s = 0; s < 32; s++) {
         const dlg = rec[0x220 + s];
-        if (dlg >= 1 && dlg <= 0x80) list[dlg] = talk[dlg] || '';
+        if (dlg >= 1 && dlg <= 0x80 && !(dlg in list)) list[dlg] = npcLabel(talk[dlg] || '');
       }
       names[loc] = list;
     });
@@ -621,7 +745,6 @@ const TLK_WORD = (() => {   // talk byte -> index in the word list (the list has
   add(76, 128, -11);
   return m;
 })();
-const TLK_FILES = ['TOWNE.TLK', 'DWELLING.TLK', 'CASTLE.TLK', 'KEEP.TLK'];
 
 function tlkWords() {
   const ovl = Files.data['DATA.OVL'], words = [];
@@ -632,75 +755,87 @@ function tlkWords() {
   return words;
 }
 
-// every script of the four TLK files: { file, npc, bytes }
-function tlkEntries() {
-  const out = [];
-  for (const file of TLK_FILES) {
-    const t = Files.data[file];
-    if (!t) continue;
-    const n = t[0] | t[1] << 8, offs = [];
-    for (let i = 0; i < n; i++) offs.push([t[2 + i * 4] | t[3 + i * 4] << 8, t[4 + i * 4] | t[5 + i * 4] << 8]);
-    const starts = offs.map(o => o[1]).sort((a, b) => a - b);
-    for (const [npc, off] of offs) {
-      const end = starts.find(s => s > off) || t.length;
-      out.push({ file, npc, bytes: t.subarray(off, end) });
+/* The original's TLK listing (its 45B8CC), of a TLK file's bytes: for each entry "Index n at
+ * $offset (length n)" and an empty line, then its bytes to the next entry's (the last to the
+ * file's last byte): characters, words of the word list (a space before when the line has no
+ * space at its end, one after), codes as "<name> ", "<gold -nnn> " (three characters after it),
+ * "<goto label_n> ", "<code_nnn> "; a 0 ends a line (trimmed; the first five labelled Name,
+ * Description, Greeting, Job and Bye, an empty line after them); 90 is an empty line and
+ * "label_n:", 9F the line "<end_dialog>"; after an entry an empty line, 120 "=" and another. */
+const TLK_FIELDS = ['Name', 'Description', 'Greeting', 'Job', 'Bye'];
+function tlkListing(t) {
+  const words = tlkWords(), out = [], n = t[0] | t[1] << 8, entries = [];
+  for (let i = 0; i < n; i++) entries.push([t[2 + i * 4] | t[3 + i * 4] << 8, t[4 + i * 4] | t[5 + i * 4] << 8]);
+  entries.forEach(([npc, off], i) => {
+    const last = i < entries.length - 1 ? entries[i + 1][1] : t.length - 1;
+    out.push(`Index ${npc} at $${off.toString(16).toUpperCase()} (length ${last - off})`, '');
+    let s = '', field = 0;
+    const space = () => { if (s && !s.endsWith(' ')) s += ' '; };
+    for (let p = off; p <= last; p++) {
+      const b = t[p];
+      if (b === 0) {
+        s = delphiTrim(s);
+        if (field < 5) s = `${TLK_FIELDS[field].padEnd(12)}: ${s}`;
+        out.push(s);
+        if (++field === 5) out.push('');
+        s = '';
+      } else if ((b >= 0xA0 && b <= 0xA1) || (b >= 0xA5 && b <= 0xDA) || (b >= 0xE1 && b <= 0xFA)) s += String.fromCharCode(b - 0x80);
+      else if (b < 0x81) { space(); s += `${words[TLK_WORD[b]] ?? ''} `; }
+      else if (b <= 0x8F) {
+        space();
+        if (b === 0x85) {
+          let g = '';
+          for (let k = p + 1; k <= p + 3 && k < t.length && t[k]; k++) g += String.fromCharCode(t[k] - 0x80);
+          s += `<gold -${g}> `;
+          p += 3;
+        } else s += `<${TLK_CODES[b - 0x81]}> `;
+      } else if (b === 0x90) { p++; out.push('', `label_${t[p] - 0x91}:`); }
+      else if (b >= 0x91 && b <= 0x9A) { space(); s += `<goto label_${b - 0x91}> `; }
+      else if (b === 0x9F) out.push('<end_dialog>');
+      else { space(); s += `<code_${String(b).padStart(3, '0')}> `; }
     }
-  }
+    out.push('', '='.repeat(120), '');
+  });
   return out;
 }
 
-function decodeTlk(bytes) {
-  const words = tlkWords(), lines = [];
-  let cur = [];
-  for (let i = 0; i <= bytes.length; i++) {
-    const b = i < bytes.length ? bytes[i] : 0;
-    if (b === 0) { lines.push(cur); cur = []; continue; }
-    if ((b >= 0xA0 && b <= 0xA1) || (b >= 0xA5 && b <= 0xDA) || (b >= 0xE1 && b <= 0xFA)) {
-      const ch = String.fromCharCode(b - 0x80);
-      if (ch === '@') continue;
-      if (typeof cur[cur.length - 1] === 'string' && cur.text) cur[cur.length - 1] += ch;
-      else { cur.push(ch); cur.text = true; }
-      continue;
-    }
-    cur.text = false;
-    cur.push(TLK_WORD[b] !== undefined && words[TLK_WORD[b]] !== undefined ? words[TLK_WORD[b]] : b);
-  }
-  const tok = t => typeof t === 'string' ? t.trim()
-    : t >= 0x81 && t <= 0x8F ? `<${TLK_CODES[t - 0x81]}>`
-    : t >= 0x91 && t <= 0x9B ? `<goto label_${t - 0x91}>` : `<code_${t}>`;
-  const text = l => l.map(tok).filter(Boolean).join(' ');
-  const out = ['Name', 'Description', 'Greeting', 'Job', 'Bye'].map((h, k) => `${h.padEnd(12)}: ${lines[k] ? text(lines[k]) : ''}`);
-  out.push('');
-  for (const l of lines.slice(5)) {
-    if (l[0] === 0x90 && l[1] === 0x9F) break;
-    if (l[0] === 0x90 && l[1] >= 0x91 && l[1] <= 0x9B) {
-      out.push('', `label_${l[1] - 0x91}:`);
-      const rest = text(l.slice(2));
-      if (rest) out.push(rest);
-      continue;
-    }
-    out.push(text(l));
-  }
-  return out;
-}
-
-// TLK: count (uint16), then (npc number uint16, offset uint16) pairs; each script starts
-// with the name as text compressed with Ultima V's talk encoding (bit 7 set = plain char)
+// TLK: count (uint16), then (npc number uint16, offset uint16) pairs.  An NPC's name is
+// the first line of its script, decoded as the original decodes it (characters, words of
+// the word list, "<...>" for codes), cut before a "<" and before a ".", Delphi-trimmed
+const delphiTrim = s => s.replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, '');
 function parseTlkNames(t) {
-  const out = {};
+  const out = {}, words = tlkWords();
   const n = t[0] | t[1] << 8;
   for (let i = 0; i < n; i++) {
     const num = t[2 + i * 4] | t[3 + i * 4] << 8, off = t[4 + i * 4] | t[5 + i * 4] << 8;
     let s = '';
-    for (let p = off; p < t.length && s.length < 30; p++) {
+    for (let p = off; p < t.length; p++) {
       const b = t[p];
       if (b === 0) break;
-      if (b & 0x80) s += String.fromCharCode(b & 0x7F);
-      else break;
+      if ((b >= 0xA0 && b <= 0xA1) || (b >= 0xA5 && b <= 0xDA) || (b >= 0xE1 && b <= 0xFA)) { s += String.fromCharCode(b - 0x80); continue; }
+      if (s && !s.endsWith(' ')) s += ' ';
+      if (b >= 0x81) { s += '<'; break; }   // a code: the name ends before its "<...>"
+      s += (TLK_WORD[b] !== undefined && words[TLK_WORD[b]] !== undefined ? words[TLK_WORD[b]] : '') + ' ';
     }
-    out[num] = s.trim();
+    let name = delphiTrim(s);
+    for (const stop of ['<', '.']) { const k = name.indexOf(stop); if (k >= 0) name = delphiTrim(name.slice(0, k)); }
+    out[num] = name;
   }
   return out;
+}
+// what the original makes of a TLK name for the map: the first letter up and the rest
+// down (its 4615F0), at most 30 characters, two exceptions, else every word capitalised
+// with " The " as " the " (45C224)
+function npcLabel(raw) {
+  const lower = s => s.replace(/[A-Z]/g, ch => ch.toLowerCase()), upper = s => s.replace(/[a-z]/g, ch => ch.toUpperCase());
+  let s = raw ? upper(raw[0]) + lower(raw.slice(1)) : '';
+  s = s.slice(0, 30);
+  if (s.includes('A scraggly, tortured soul')) return 'Tortured soul';
+  if (s.includes('Johne, captain johne')) return 'Johne';
+  s = delphiTrim(lower(s));
+  let out = '', cap = true;
+  for (const ch of s) { if (ch === ' ') { cap = true; out += ch; } else { out += cap ? upper(ch) : ch; cap = false; } }
+  return out.split(' The ').join(' the ');
 }
 
 /* ------------------------------------------------------- game state */
@@ -714,6 +849,7 @@ const COPYRIGHT = 'MS Run-Time Library - Copyright (c) 1988, Microsoft Corp';
 const Game = {
   base: null, save: null, view: null, mapbuf: null, cmap: null, cunits: null, info: null, lastOk: 0, tick: 0,
   wasDead: false, charmedSlots: new Set(), lastChunk: [0, 0],
+  hostiles: 0,   // the hostile creatures of the last look at a fight (kept after it: mixing waits for 0)
   get loc() { return this.save[0x2ED]; },
   get facing() { return this.save[0x105D]; },   // in dungeons: 0 north, 1 east, 2 south, 3 west
   get partySize() { return this.save[0x2B5]; },
@@ -869,20 +1005,46 @@ function indexOfBytes(hay, needle) {
 
 /* ---------------------------------------------------- exploration */
 
+/* The explored maps as the original keeps them: a working copy in memory, which is what
+ * was kept when the game is found (the original's Explored.UM5 in the game folder; here
+ * the browser's store, which takes that file over once per version of it), and which is
+ * kept again only when the game has been saved: the original looks at SAVED.GAM's date
+ * every 5 seconds, the page at its contents.  When SAVED.GAM can't be read again (a folder
+ * chosen in the browser gives a snapshot), every change is kept at once. */
 const Explored = {
-  maps: {}, dirty: new Set(), gen: 0,
+  maps: {}, dirty: new Set(), gen: 0, fromStore: true,
   size(key) { return key === 'w' || key === 'u' ? 256 : key[0] === 'd' ? 8 : 32; },
   get(key) {
     if (!this.maps[key]) {
       const m = this.maps[key] = new Uint8Array(this.size(key) ** 2);
-      DB.get('kv', 'exp:' + key).then(b => {
-        if (!b) return;
+      if (this.fromStore) DB.get('kv', 'exp:' + key).then(b => {
+        if (!b || this.maps[key] !== m) return;
         const old = new Uint8Array(b);
         for (let i = 0; i < m.length; i++) m[i] |= old[i];
         this.gen++; Render.draw();
       });
     }
     return this.maps[key];
+  },
+  // the game found: the working copy is what was kept
+  reload() { this.maps = {}; this.fromStore = true; this.dirty.clear(); this.gen++; },
+  // keep the working copy (the game was saved); after "unexplore all" what isn't in it is gone
+  async persist() {
+    if (!this.fromStore) {
+      for (const k of await DB.keys('kv')) if (String(k).startsWith('exp:') && !this.maps[String(k).slice(4)]) await DB.del('kv', k);
+      this.fromStore = true;
+    }
+    for (const [k, m] of Object.entries(this.maps)) await DB.put('kv', 'exp:' + k, m.buffer.slice(0));
+    this.dirty.clear();
+  },
+  // the original's Explored.UM5 (world, underworld, 32 places x 5 floors, 8 dungeons x 8
+  // levels) into the store, replacing what it held
+  async store(f) {
+    for (const k of await DB.keys('kv')) if (String(k).startsWith('exp:')) await DB.del('kv', k);
+    const put = (key, o, n) => { const m = f.subarray(o, o + n); if (m.some(v => v)) return DB.put('kv', 'exp:' + key, m.slice().buffer); };
+    await put('w', 0, 0x10000); await put('u', 0x10000, 0x10000);
+    for (let loc = 1; loc <= 32; loc++) for (let s = 0; s < 5; s++) await put(`s${loc}_${s - 1}`, 0x20000 + (loc - 1) * 0x1400 + s * 0x400, 0x400);
+    for (let loc = 33; loc <= 40; loc++) for (let z = 0; z < 8; z++) await put(`d${loc}_${z}`, 0x48000 + (loc - 33) * 0x200 + z * 0x40, 0x40);
   },
   // marks one cell; nothing wraps around the edges, like the original
   mark(key, x, y) {
@@ -903,23 +1065,16 @@ const Explored = {
       for (let y = y0; y < y0 + 32; y++) for (let x = x0; x < x0 + 32; x++) this.mark(key, x, y);
     } else if (area !== 'combat') this.fill(key, 1);
   },
-  async clearAll() {
-    for (const k of await DB.keys('kv')) if (String(k).startsWith('exp:')) await DB.del('kv', k);
-    this.maps = {}; this.gen++; Render.draw();
-  },
+  // "Unexplore all": the working copy, as the original's (kept with the next saved game)
+  clearAll() { this.maps = {}; this.fromStore = false; this.dirty.add('*'); this.gen++; Render.draw(); },
   shown(area) {
     const s = Settings.v;
     return area === 'world' ? s.worldExplored : area === 'under' ? s.underworldExplored
       : area === 'dungeon' ? s.dungeonsExplored : area === 'combat' || s.townsExplored;
   },
-  flush() {
-    for (const k of this.dirty) DB.put('kv', 'exp:' + k, this.maps[k].buffer.slice(0));
-    this.dirty.clear();
-  },
-  // everything explored in the original's Explored.UM5 layout: world and underworld
-  // (256 x 256 each), the small maps (32 places x 5 floors x 32 x 32), the dungeons
+  // what was kept, in the original's Explored.UM5 layout: world and underworld (256 x 256
+  // each), the small maps (32 places x 5 floors x 32 x 32), the dungeons
   async file() {
-    this.flush();
     const out = new Uint8Array(0x20000 + 0x28000 + 0x1000);
     for (const k of await DB.keys('kv')) {
       const key = String(k);
@@ -932,7 +1087,17 @@ const Explored = {
     return out;
   },
 };
-setInterval(() => Explored.flush(), 3000);
+// SAVED.GAM as seen when the game was found or last saved (null: it can't be read again)
+const SaveWatch = {
+  stamp: null,
+  async tick() {
+    const b = await Files.readSave(), s = b ? Array.from(b).join(',') : null;
+    if (s === null) { if (Explored.dirty.size) await Explored.persist(); return; }
+    if (this.stamp !== null && s !== this.stamp) await Explored.persist();
+    this.stamp = s;
+  },
+};
+setInterval(() => { if (Game.base !== null && Game.save) SaveWatch.tick(); }, 5000);
 // the origin of the 2x2 chunks around a position, as the game and the original compute it
 const chunkOrigin = v => clamp(Math.trunc((v - 5) / 16) * 16, 0, 0xE0);
 
@@ -961,12 +1126,15 @@ function markVisible() {
   if (x < 32 && y < 32) Visible.cells[y * 32 + x] = 1;
   if (S.townsExplored) return;
   const v = Game.view, m = Game.mapbuf;
-  for (let r = 0; r < 11; r++) for (let c = 0; c < 11; c++) {
+  let agree = true;
+  check: for (let r = 0; r < 11; r++) for (let c = 0; c < 11; c++) {
     const mx = x - 5 + c, my = y - 5 + r, t = v[r * 32 + c];
     if (mx < 0 || my < 0 || mx >= 32 || my >= 32 || t === 0 || t === 0xFF) continue;
-    if (m[my * 32 + mx] !== t) return;
+    if (m[my * 32 + mx] !== t) { agree = false; break check; }
   }
-  for (let r = 0; r < 11; r++) for (let c = 0; c < 11; c++) {
+  // the original's second pass stops after a row when they disagree: the view's top row
+  // is marked even then
+  for (let r = 0; r < (agree ? 11 : 1); r++) for (let c = 0; c < 11; c++) {
     const mx = x - 5 + c, my = y - 5 + r;
     if (mx < 0 || my < 0 || mx >= 32 || my >= 32 || v[r * 32 + c] === 0xFF) continue;
     Visible.cells[my * 32 + mx] = 1;
@@ -986,8 +1154,8 @@ const Hud = {
   canvas: $('#hud'), last: '', side: null,
   draw() {
     const c = this.canvas, s = Game.save, S = Settings.v;
-    c.classList.toggle('hidden', !S.hud);
-    if (!s || !S.hud) { this.last = ''; return; }
+    c.classList.toggle('hidden', !S.hud || !Game.active);
+    if (!s || !S.hud || !Game.active) { this.last = ''; return; }
     const W = $('#mapwrap').clientWidth || 640, u = round(W / 50), H = u * 11;
     const sig = [W, ...s.subarray(2, 0x202), s[0x2D9], s[0x2DB], s[0x206], s[0x20B], s[0x208], s[0x207], ...Game.charmedSlots].join();
     if (sig === this.last) return;
@@ -1001,15 +1169,12 @@ const Hud = {
       const x = k * (col + u) + 0.5;
       g.beginPath(); g.moveTo(x, round(u / 2)); g.lineTo(x, H - round(u / 2)); g.stroke();
     }
-    const font = size => { g.font = `${pt(size)}px Verdana`; };
+    const font = size => Gdi.font(g, pt(size));
+    // right aligned: TextOut at the right edge minus TextWidth, like the original
     const text = (t, x, y, colour, align = 'left') => {
-      g.fillStyle = colour; g.textAlign = align; g.textBaseline = 'top'; g.fillText(t, x, y); g.textAlign = 'left';
+      g.fillStyle = colour; Gdi.text(g, t, align === 'right' ? x - Gdi.width(g, t) : x, y);
     };
-    const centred = (t, x, y, w, h, colour) => {
-      g.fillStyle = colour; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(t, x + w / 2, y + h / 2);
-      g.textAlign = 'left'; g.textBaseline = 'top';
-    };
+    const centred = (t, x, y, w, h, colour) => { g.fillStyle = colour; Gdi.centred(g, t, x, y, w, h); };
     let cx = round(u * 0.5);
     for (let k = 0; k < 6; k++, cx += col + u) {
       const o = 2 + k * 32;
@@ -1035,10 +1200,11 @@ const Hud = {
       text(String.fromCharCode(s[o + 0x0A]) + ' ' + level, cx + col, ry, '#999999', 'right');
       ry += round(u * 1.25);
       for (let a = 0; a < 3; a++, ry += u) text(String(s[o + 0x0C + a]), cx + col, ry, '#999999', 'right');
-      y -= round(u * 1.25);
+      y -= round(u * 0.5);
       g.fillStyle = Game.charmedSlots.has(k) ? '#660066' : st === 0x44 ? '#1A1A1A' : st === 0x50 ? '#660000' : st === 0x53 ? '#666600' : '#006600';
       g.fillRect(cx, y, col, u);
-      centred(Game.recordName(o).trim(), cx, y, col, u, '#EEEEEE');
+      // the name in capitals (the original's UpperCase: a to z only)
+      centred(Game.recordName(o).replace(/[a-z]/g, ch => ch.toUpperCase()), cx, y, col, u, '#EEEEEE');
     }
     const sx = 6 * (col + u), sw = round(u * 4.5);
     this.side = [sx - u, 0, W, H];
@@ -1058,19 +1224,21 @@ const Hud = {
   bar(g, x, y, w, h, label, colours, max, value) {
     g.fillStyle = '#191919'; g.fillRect(x, y, w, h);
     if (max > 0) {
-      const fill = Math.min(w, Math.trunc(w * value / max)), idx = Math.min(4, Math.trunc(value * (4 / max)));
+      // in the original's single precision: the fraction, then the width times it, cut
+      const fill = Math.min(w, Math.trunc(w * Math.fround(value / max)));
+      const idx = Math.min(4, Math.trunc(Math.fround(value * (4 / max))));
       if (idx >= 0) { g.fillStyle = colours[idx]; g.fillRect(x, y, fill, h); }
     }
     if (label === null) label = `${value} / ${max}`;
     if (!label) return;
-    g.font = `${pt(round(h * 0.5))}px Verdana`; g.fillStyle = '#EEEEEE'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText(label, x + w / 2, y + h / 2);
-    g.textAlign = 'left'; g.textBaseline = 'top';
+    Gdi.font(g, pt(round(h * 0.5))); g.fillStyle = '#EEEEEE';
+    Gdi.centred(g, label, x, y, w, h);
   },
 };
 Hud.canvas.addEventListener('mousedown', ev => {
   const r = Hud.canvas.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top, b = Hud.side;
-  if (!Game.save || !b || x < b[0] || y < b[1] || x > b[2] || y > b[3]) return;
+  if (!Game.save || !Game.active || !b || x < b[0] || y < b[1] || x > b[2] || y > b[3]) return;
+  ev.preventDefault();   // the focus left with the list window, as the original gives it
   Lists.open(ev.button === 0 ? 'spells' : 'inventory');
 });
 Hud.canvas.addEventListener('contextmenu', ev => ev.preventDefault());
@@ -1091,7 +1259,7 @@ const DUNGEON_INFO = { 0: 'corridor', 1: 'ladder up', 2: 'ladder down', 3: 'ladd
 const halfBright = hex => '#' + [1, 3, 5].map(i => Math.min(255, round(parseInt(hex.slice(i, i + 2), 16) * 0.5)).toString(16).padStart(2, '0')).join('');
 
 const Render = {
-  mouse: null, mouseCell: null, lens: false, canvas: $('#map'), dungeonBox: null,
+  mouse: [-1, -1], mousePx: [-1, -1], lastMove: 0, lastClient: [null, null], lens: false, canvas: $('#map'), dungeonBox: null,
   base: null, baseKey: '', small: null, smallKey: '', mask: null, maskKey: '',
   work: document.createElement('canvas'), dungeon: document.createElement('canvas'),
   // the map window's size: the setting (512 to 1600), or what fits the window
@@ -1123,10 +1291,7 @@ const Render = {
     const a = transparent ? U5.tilesT() : U5.tiles();
     if (a) g.drawImage(a, (t % 32) * 16, (t >> 5) * 16, 16, 16, x, y, 16, 16);
   },
-  textHeight(g) {
-    const m = g.measureText('AjM');
-    return Math.ceil((m.fontBoundingBoxAscent || 0) + (m.fontBoundingBoxDescent || 0)) || Math.round(parseInt(g.font) * 1.2);
-  },
+  textHeight(g) { return Gdi.height(g); },
   // the area at 16 pixels a tile
   baseImage(cur) {
     const key = cur.key + ':' + cur.tiles.join(',');
@@ -1136,7 +1301,7 @@ const Render = {
     const g = c.getContext('2d');
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
       const t = cur.tiles[y * n + x];
-      if (cur.area !== 'combat' || t > 0) this.tile(g, t, x * 16, y * 16, cur.area === 'combat');
+      if (cur.area !== 'combat' || t > 0) this.tile(g, t, x * 16, y * 16);
     }
     this.base = c; this.baseKey = key;
     return c;
@@ -1179,10 +1344,10 @@ const Render = {
   // a message instead of the map, the original's way: Verdana, grey, the lines centred
   message(text) {
     const [g, W] = this.prepare();
-    g.font = `${pt(round(W / 35))}px Verdana`; g.fillStyle = '#CCCCCC'; g.textBaseline = 'top'; g.textAlign = 'left';
-    const lines = text.split('\n'), lh = this.textHeight(g);
+    Gdi.font(g, pt(round(W / 35))); g.fillStyle = '#CCCCCC';
+    const lines = text.split('\n'), lh = Gdi.height(g);
     let y = Math.trunc((W - lh * lines.length) / 2);
-    for (const l of lines) { g.fillText(l, Math.trunc((W - g.measureText(l).width) / 2), y); y += lh; }
+    for (const l of lines) { Gdi.text(g, l, Math.trunc((W - Gdi.width(g, l)) / 2), y); y += lh; }
   },
   draw() {
     const msg = $('#msg');
@@ -1223,7 +1388,7 @@ const Render = {
       this.frame(g, round(ox * cell), round(oy * cell), round((ox + 32) * cell), round((oy + 32) * cell));
     }
     if (under ? S.underworldTitles : S.worldTitles) {
-      g.font = `${pt(clamp(Math.trunc(W / 65), 8, 16))}px Verdana`;
+      Gdi.font(g, pt(clamp(Math.trunc(W / 65), 8, 16)));
       const titles = [];
       for (let loc = 1; loc <= 40; loc++) {
         const xy = U5.locXY(loc);
@@ -1251,14 +1416,13 @@ const Render = {
       this.frame(g, px - a, py - a, px + b, py + b);
       this.frame(g, px - a - 1, py - a - 1, px + b + 1, py + b + 1);
     }
-    if (this.lens && this.mouseCell) this.drawLens(g, cur, W);
+    if (this.lens) this.drawLens(g, cur, W);
   },
   // a title: centred on x with its bottom at y, white over a black shadow 2 pixels off
   title(g, x, y, name) {
-    g.textAlign = 'left'; g.textBaseline = 'top';
-    const w = g.measureText(name).width, h = this.textHeight(g), tx = x - (w >> 1), ty = y - h;
-    g.fillStyle = '#000000'; g.fillText(name, tx + 2, ty + 2);
-    g.fillStyle = '#FFFFFF'; g.fillText(name, tx, ty);
+    const w = Gdi.width(g, name), h = Gdi.height(g), tx = x - Math.trunc(w / 2), ty = y - h;
+    g.fillStyle = '#000000'; Gdi.text(g, name, tx + 2, ty + 2);
+    g.fillStyle = '#FFFFFF'; Gdi.text(g, name, tx, ty);
   },
   // the zoom view: an odd number of tiles (a 64th of the window) around the mouse tile,
   // the tiles at double size, in the half of the window away from the mouse; it shows
@@ -1267,7 +1431,7 @@ const Render = {
     let tiles = (W >> 1) >> 5;
     if (!(tiles & 1)) tiles--;
     tiles = Math.max(1, tiles);
-    const L = tiles * 16, half = tiles >> 1, m = this.mouseCell, lc = this.work;
+    const L = tiles * 16, half = tiles >> 1, m = { x: this.mouse[0], y: this.mouse[1] }, lc = this.work;
     lc.width = lc.height = L;
     const lg = lc.getContext('2d');
     lg.fillStyle = '#000000'; lg.fillRect(0, 0, L, L);
@@ -1275,7 +1439,7 @@ const Render = {
       const tx = m.x - half + k, ty = m.y - half + r;
       if (tx >= 0 && ty >= 0 && tx < 256 && ty < 256) this.tile(lg, cur.tiles[ty * 256 + tx], k * 16, r * 16);
     }
-    const bottom = this.mouseCell.py <= Math.trunc(W / 2);
+    const bottom = this.mousePx[1] <= Math.trunc(W / 2);
     const x0 = Math.trunc((W - 2 * L) / 2), y0 = Math.trunc((Math.trunc(W / 2) - 2 * L) / 2) + (bottom ? Math.trunc(W / 2) : 0);
     g.drawImage(lc, 0, 0, L, L, x0, y0, 2 * L, 2 * L);
     g.strokeStyle = '#AAAAAA';
@@ -1290,19 +1454,22 @@ const Render = {
     const S = Settings.v, cell = W / 32, f = this.work, zb = Game.save[0x2EF];
     f.width = f.height = 512;
     const fg = f.getContext('2d');
+    fg.imageSmoothingEnabled = false;
+    // the explored cells' tiles (the others black), then the save's units on this floor
+    // where the view shows them (anywhere once "towns explored" is on), drawn whole, over
+    // explored and unexplored cells alike; the party's own sprite (tile 1C) only with
+    // "party location"
     fg.drawImage(this.baseImage(cur), 0, 0);
-    // the save's units on this floor where the view shows them (anywhere once "towns
-    // explored" is on); the party's own sprite (tile 1C) only with "party location"
+    if (!S.townsExplored) fg.drawImage(this.maskImage(cur), 0, 0, 512, 512);
     for (let i = 0; i < 32; i++) {
       const u = Game.unit(i);
       if (!u.tile || u.z !== zb || u.x >= 32 || u.y >= 32 || (u.tile === 0x1C && !S.partyLocation)) continue;
       if (!S.townsExplored && !Visible.cells[u.y * 32 + u.x]) continue;
-      this.tile(fg, 0x100 + u.tile, u.x * 16, u.y * 16, true);
+      this.tile(fg, 0x100 + u.tile, u.x * 16, u.y * 16);
     }
     g.drawImage(f, 0, 0, 512, 512, 0, 0, W, W);
-    if (!S.townsExplored) g.drawImage(this.maskImage(cur), 0, 0, W, W);
     if (S.npcNames) {
-      g.font = `${pt(clamp(Math.trunc(W / 60), 8, 16))}px Verdana`;
+      Gdi.font(g, pt(clamp(Math.trunc(W / 60), 8, 16)));
       for (let i = 0; i < 32; i++) {
         const u = Game.unit(i);
         if (!u.tile || u.z !== zb || u.x >= 32 || u.y >= 32) continue;
@@ -1311,7 +1478,7 @@ const Render = {
         if (name) this.label(g, round(u.x * cell + 8), round(u.y * cell), name);
       }
     }
-    if (this.mouse) {   // the cell under the mouse, framed in yellow
+    {   // the mouse's cell framed in yellow (at -1, -1 a corner of it shows)
       const [mx, my] = this.mouse, l = round(mx * cell), t = round(my * cell), r = round((mx + 1) * cell) + 1, b = round((my + 1) * cell) + 1;
       g.strokeStyle = '#FFFF00';
       this.frame(g, l - 1, t - 1, r, b);
@@ -1320,10 +1487,9 @@ const Render = {
   },
   // an NPC's name: white in a black box above the point
   label(g, x, y, text) {
-    g.textAlign = 'left'; g.textBaseline = 'top';
-    const w = g.measureText(text).width, h = this.textHeight(g), tx = x - (w >> 1), ty = y - (h + 4);
+    const w = Gdi.width(g, text), h = Gdi.height(g), tx = x - Math.trunc(w / 2), ty = y - (h + 4);
     g.fillStyle = '#000000'; g.fillRect(tx - 5, ty - 2, w + 10, h + 5);
-    g.fillStyle = '#FFFFFF'; g.fillText(text, tx, ty);
+    g.fillStyle = '#FFFFFF'; Gdi.text(g, text, tx, ty);
   },
   // a dungeon level: 8x8 cells of 16 pixels - corridors #333333, walls and doors,
   // ladders, chests and fountains as tiles, the party as an arrow - at a scale of 1 to 4
@@ -1337,7 +1503,10 @@ const Render = {
       if (!S.dungeonsExplored && !exp[i]) continue;
       const x = (i & 7) * 16, y = (i >> 3) * 16;
       dg.fillStyle = '#333333'; dg.fillRect(x, y, 16, 16);
-      for (const t of DUNGEON_TILES[cur.cells[i] >> 4] || []) this.tile(dg, t, x, y, true);
+      // walls and doors whole, from the original's image list; ladders, chests and
+      // fountains through a bitmap with black see-through, as the original draws them
+      const type = cur.cells[i] >> 4;
+      for (const t of DUNGEON_TILES[type] || []) this.tile(dg, t, x, y, type < 11);
     }
     if (S.partyLocation && Game.facing < 4) {   // the party: an arrow the way it faces (the original has bitmaps for this)
       dg.save(); dg.translate(Game.x * 16 + 8, Game.y * 16 + 8); dg.rotate(Game.facing * Math.PI / 2);
@@ -1361,7 +1530,7 @@ const Render = {
     g.drawImage(this.baseImage(cur), 0, 0, 176, 176, 0, 0, W, W);
     const cell = round(W / 176 * 16), m = round(cell * 0.125);
     if (!cb.over) {
-      g.font = `${pt(round(cell * 0.2))}px Verdana`;
+      Gdi.font(g, pt(round(cell * 0.2)));
       for (const u of cb.units) {
         if (!u || u.hp === 0 || (u.hidden && !S.debug) || u.x > 10 || u.y > 10) continue;
         const colour = u.i === cb.active ? '#5555FF' : u.charmed ? '#AA22AA' : u.friendly ? '#22AA22' : '#BB2222';
@@ -1369,9 +1538,8 @@ const Render = {
         g.fillStyle = colour; g.fillRect(l, t, r - l, b - t);
         g.strokeStyle = halfBright(colour);
         this.frame(g, l, t, r, b); this.frame(g, l + 1, t + 1, r - 1, b - 1);
-        g.fillStyle = '#FFFFFF'; g.textAlign = 'center'; g.textBaseline = 'middle';
-        g.fillText(u.asleep ? 'Z' : String(u.hp), (l + r) / 2, (t + b) / 2);
-        g.textAlign = 'left'; g.textBaseline = 'top';
+        g.fillStyle = '#FFFFFF';
+        Gdi.centred(g, u.asleep ? 'Z' : String(u.hp), l, t, r - l, b - t);
       }
       if (Game.save[0x2F2] === 1) {
         const ax = Game.save[0x2F3], ay = Game.save[0x2F4];
@@ -1382,16 +1550,19 @@ const Render = {
         }
       }
       if (Quickfight.on) {
-        g.font = `${pt(round(cell * 0.75))}px Verdana`; g.textBaseline = 'top'; g.textAlign = 'left';
-        const qx = W - (cell >> 1) - g.measureText('Q').width, qy = cell >> 2;
-        g.fillStyle = '#000000'; g.fillText('Q', qx + 3, qy + 3);
-        g.fillStyle = '#FFFF00'; g.fillText('Q', qx, qy);
+        Gdi.font(g, pt(round(cell * 0.75)));
+        const qx = W - (cell >> 1) - Gdi.width(g, 'Q'), qy = cell >> 2;
+        g.fillStyle = '#000000'; Gdi.text(g, 'Q', qx + 3, qy + 3);
+        g.fillStyle = '#FFFF00'; Gdi.text(g, 'Q', qx, qy);
       }
     }
-    if (this.mouse) {
-      const [mx, my] = this.mouse, l = round(mx * cell), t = round(my * cell), r = round((mx + 1) * cell), b = round((my + 1) * cell);
+    {   // the mouse's cell framed three pixels thick, at an eleventh of the window a cell
+      const [mx, my] = this.mouse, f = Math.fround(W / 11);
+      const l = round(mx * f), t = round(my * f), r = (mx + 1) * f, b = (my + 1) * f;
       g.strokeStyle = '#FFFF00';
-      this.frame(g, l, t, r, b); this.frame(g, l - 1, t - 1, r, b); this.frame(g, l - 2, t - 2, r, b);
+      this.frame(g, l, t, round(r), round(b));
+      this.frame(g, l - 1, t - 1, round(r + 1), round(b + 1));
+      this.frame(g, l - 2, t - 2, round(r + 2), round(b + 2));
     }
   },
   // keeps the party in sight when the map is bigger than the window
@@ -1411,17 +1582,19 @@ const Render = {
     const r = this.canvas.getBoundingClientRect(), W = this.canvas.width;
     const px = Math.trunc(ev.clientX - r.left), py = Math.trunc(ev.clientY - r.top);
     if (px < 0 || py < 0 || px >= W || py >= W) return null;
-    let x, y;
-    if (cur.n === 256) { x = round(px / (W / 256)); y = round(py / (W / 256)); }
-    else if (cur.n === 32) { const d = (W + 31) >> 5; x = Math.trunc(px / d); y = Math.trunc(py / d); }
-    else if (cur.n === 8) {
-      const [ox, oy, cs] = this.dungeonBox || [0, 0, 16];
-      if (px < ox || px > ox + cs * 8 || py < oy || py > oy + cs * 8) return null;
-      const d = (cs * 8 + 7) >> 3;
-      x = Math.trunc((px - ox) / d); y = Math.trunc((py - oy) / d);
-    } else { const d = Math.trunc(W / 11); x = Math.trunc(px / d); y = Math.trunc(py / d); }
-    if (x < 0 || y < 0 || x >= cur.n || y >= cur.n) return null;
-    return { x, y, px, py, cur };
+    // the original's 46DD8C, an axis at a time: large maps round the position over a
+    // 256th of the window; small maps divide by W div 32, combat by W div 11; in a
+    // dungeon -1 outside its square, else the position in it divided by an eighth
+    const axis = (p, o) => {
+      if (cur.n === 256) return round(p / (W / 256));
+      if (cur.n === 32) return Math.trunc(p / (W >> 5));
+      if (cur.n === 8) {
+        const [ox, , cs] = this.dungeonBox || [0, 0, 16], end = ox + cs * 8;
+        return p < ox || p > end ? -1 : Math.trunc((p - ox) / ((end - ox) >> 3));
+      }
+      return Math.trunc(p / Math.trunc(W / 11));
+    };
+    return { x: axis(px), y: axis(py), px, py, cur };
   },
 };
 
@@ -1429,27 +1602,27 @@ const Render = {
 
 function updateTitle() {
   if (!Game.save) return;
-  const a = Game.area(), m = Render.mouseCell;
+  const a = Game.area(), m = Render.mouse;
   let t;
   if (a === 'world') t = `World - ${pad3(Game.x)},${pad3(Game.y)}`;
   else if (a === 'under') t = `Underworld - ${pad3(Game.x)},${pad3(Game.y)}`;
-  else if (a === 'combat') t = Game.combat().hostiles > 0 ? 'Combat' : 'Ultimapper 5';
+  else if (a === 'combat') { const cb = Game.combat(); t = !cb.over && cb.hostiles > 0 ? 'Combat' : 'Ultimapper 5'; }
   else if (a === 'dungeon') t = `Dungeon ${LOC_NAMES[Game.loc]} - Level ${Game.z + 1} - ${pad3(Game.x)},${pad3(Game.y)}`;
   else t = `${LOC_NAMES[Game.loc] || 'Location ' + Game.loc} - ${Game.save[0x2EF] === 0xFF ? 'Basement' : 'Level ' + (Game.z + 1)} - ${pad3(Game.x)},${pad3(Game.y)}`;
-  if (m && a !== 'combat') t += ` - ${pad3(m.x)},${pad3(m.y)}`;
+  if (m[0] >= 0 && m[1] >= 0 && a !== 'combat') t += ` - ${pad3(m[0])},${pad3(m[1])}`;
   $('#title').textContent = t;
   document.title = t + ' - Ultimapper 5';
 }
 
 /* ------------------------------------------------------- main loop */
 
-let lastKey = '', lastPeer = null, readFails = 0;
+let lastLoc = [0, 0], lastPeer = null, readFails = 0;
 
 async function loop() {
   Settings.load();
   await Files.loadCached().catch(() => {});
   const dataUrl = new URLSearchParams(location.search).get('data');
-  if (dataUrl) await Files.importUrl(dataUrl).catch(e => log(e.message));
+  if (dataUrl) await Files.importUrl(dataUrl).catch(e => console.warn(e));
   try {
     Game.info = await Api.info();
   } catch {
@@ -1468,8 +1641,17 @@ async function loop() {
           '<i>Journey Onward</i>. Ultimapper finds it by itself.</p>';
         Game.base = await Game.find();
         if (Game.base === null) { await sleep(2000); continue; }
-        log(`Ultima V found: data segment ${hex(Game.base >> 4)} (linear ${hex(Game.base, 6)})`);
-        lastKey = ''; lastPeer = null; readFails = 0; Game.lastChunk = [0, 0];
+        // the original's two lines (Delphi's %x), its addresses DOSBox's memory as the API
+        // gives the originals (from 1000000)
+        log(`DATA.OVL at $${(0x1000000 + Game.base).toString(16).toUpperCase()}`);
+        log(`SAVED.GAM at $${(0x1000000 + Game.base + SAVE).toString(16).toUpperCase()}`);
+        lastLoc = [0, 0]; lastPeer = null; readFails = 0; Game.lastChunk = [0, 0];
+        // as the original when it finds the game: the saved game's name and date, the
+        // explored maps from what was kept
+        const save = await Files.readSaveName();
+        SaveWatch.stamp = save ? Array.from(save).join(',') : null;
+        await Files.importExplored();
+        Explored.reload();
       }
       let d;
       try {
@@ -1486,6 +1668,7 @@ async function loop() {
       Game.lastOk = Date.now();
       setConn(`DOSBox ${Game.info.version.split(' ')[0]}`, 'ok');
       onUpdate();
+      Lists.tick();   // the original's position timer: whatever the game shows
     } catch (e) {
       setConn('DOSBox not answering', 'bad');
       await sleep(1500);
@@ -1503,16 +1686,24 @@ function onUpdate() {
   const s = Game.save, loc = Game.loc;
   // (the chunk origin is the one seen last tick, like the original's: none yet right after finding the game)
   if (s[0x6B4] === 0 && s[0x6B6] === 0 && loc === 13 && Game.x === 15 && Game.y === 15 && s[0x2EF] === 0 && !Game.lastChunk[0] && !Game.lastChunk[1]) {
+    Game.chargen = true;
     Render.message(CHARGEN_TEXT); Hud.draw(); return;
   }
-  if (loc === 0x40 || loc === 0x42) { Render.message(NOT_PLAYING_TEXT); return; }
+  // after the character creation the original reads SAVED.GAM's name again and skips a tick
+  if (Game.chargen) { Game.chargen = false; Files.readSaveName(); return; }
+  // the HUD shows only while the game is "active": since the names last matched
+  if (loc === 0x40 || loc === 0x42 || (Files.saveName !== null && Game.recordName(2, 10) !== Files.saveName)) {
+    Game.active = false; Hud.draw();
+    Render.message(NOT_PLAYING_TEXT); return;
+  }
+  Game.active = true;
   if (loc > 40 && loc !== 0xFF) return;
   if (loc !== 0xFF) { Quickfight.stop(true); Game.charmedSlots.clear(); }
   Game.lastChunk = [s[0x2F5], s[0x2F6]];
-  const key = Game.areaKey();
-  if (key !== lastKey) {
-    if (lastKey) { log(''); log(`Location changed to ${loc} (z = ${s[0x2EF]}).`); }
-    lastKey = key;
+  // the original's: the location and z against the last ones (0, 0 when the game is found)
+  if (loc !== lastLoc[0] || s[0x2EF] !== lastLoc[1]) {
+    log(''); log(`Location changed to ${loc} (z = ${s[0x2EF]}).`);
+    lastLoc = [loc, s[0x2EF]];
   }
   const dead = Game.partyDead() || ((loc === 17 || loc === 0xFF) && s[0x6B4 + 8] === 0x74 && s[0x6B4 + 10] === 5 && s[0x6B4 + 11] === 2);
   if (dead) {
@@ -1524,8 +1715,9 @@ function onUpdate() {
     return;
   }
   Game.wasDead = false;
+  if (loc === 0xFF) Game.hostiles = Game.combat().hostiles;
   const peer = [s[0x207], s[0x271], s[0x27E]];   // gems, In Quas Wis mixed, In Quas Wis scrolls
-  if (lastPeer && Settings.v.peerExplore && peer.some((v, i) => v < lastPeer[i])) { Explored.peer(); log('Gem or In Quas Wis used: the area was shown'); }
+  if (lastPeer && Settings.v.peerExplore && peer.some((v, i) => v < lastPeer[i])) Explored.peer();
   lastPeer = peer;
   markVisible();
   if (Settings.v.autoLevelUp && loc !== 0xFF) AutoLevel.check();
@@ -1533,24 +1725,37 @@ function onUpdate() {
   Hud.draw();
   updateTitle();
   Render.draw();
-  Lists.refresh();
 }
 
 /* ---------------------------------------------------------- events */
 
 const cv = Render.canvas;
+// The mouse's cell, as the original keeps it: -1, -1 until the mouse moves over the map,
+// kept when it leaves, and back to -1, -1 three seconds after it last moved (the yellow
+// frame and the title's second coordinates go with it)
 cv.addEventListener('mousemove', ev => {
+  // the browser repeats a move where the mouse stands when the page's layout changes;
+  // only real moves count, as for the original
+  if (ev.clientX === Render.lastClient[0] && ev.clientY === Render.lastClient[1]) return;
+  Render.lastClient = [ev.clientX, ev.clientY];
   const c = Render.cellAt(ev);
-  Render.mouse = c ? [c.x, c.y] : null;
-  Render.mouseCell = c;
+  if (!c) return;
+  Render.lastMove = Date.now();
+  const moved = c.x !== Render.mouse[0] || c.y !== Render.mouse[1];
+  Render.mouse = [c.x, c.y]; Render.mousePx = [c.px, c.py];
   showTip(ev, c);
   updateTitle();
-  // the original repaints on the move only where the mouse shows: small maps and combat
-  // (the yellow cell), and the large maps while the zoom view follows it
+  // the original repaints when the cell changes, where the mouse shows: small maps and
+  // combat (the yellow cell), and the large maps while the zoom view follows it
   const a = Game.save ? Game.area() : '';
-  if (a === 'small' || a === 'combat' || (Render.lens && (a === 'world' || a === 'under'))) Render.draw();
+  if (moved && (a === 'small' || a === 'combat' || (Render.lens && (a === 'world' || a === 'under')))) Render.draw();
 });
-cv.addEventListener('mouseleave', () => { Render.mouse = Render.mouseCell = null; $('#tip').style.display = 'none'; Render.draw(); });
+cv.addEventListener('mouseleave', () => { $('#tip').style.display = 'none'; });
+setInterval(() => {
+  if (Date.now() - Render.lastMove < 3000 || (Render.mouse[0] === -1 && Render.mouse[1] === -1)) return;
+  Render.mouse = [-1, -1]; Render.mousePx = [-1, -1];
+  updateTitle(); Render.draw();
+}, 200);
 cv.addEventListener('mousedown', ev => {
   if (!Game.save) return;
   if (ev.button === 0 && Quickfight.on) { Quickfight.stop(); return; }
@@ -1565,7 +1770,7 @@ window.addEventListener('resize', () => { Hud.last = ''; Hud.draw(); Render.draw
 
 function showTip(ev, c) {
   const tip = $('#tip');
-  if (!c || !Game.save) { tip.style.display = 'none'; return; }
+  if (!c || !Game.save || c.x < 0 || c.y < 0 || c.x >= c.cur.n || c.y >= c.cur.n) { tip.style.display = 'none'; return; }
   const lines = [`${pad3(c.x)},${pad3(c.y)}`];
   if (c.cur.tiles) lines[0] += `  tile ${hex(c.cur.tiles[c.y * c.cur.n + c.x], 2)}`;
   if (c.cur.cells) lines[0] += `  cell ${hex(c.cur.cells[c.y * 8 + c.x], 2)}`;
@@ -1634,7 +1839,7 @@ const Menu = {
         { label: 'Towns explored', ...chk('townsExplored') }, { label: 'Dungeons explored', ...chk('dungeonsExplored') },
         '-', { label: 'Explore area', act: () => Game.save && Game.area() !== 'combat' && Explored.fill(Game.areaKey(), 1) },
         { label: 'Unexplore area', act: () => Game.save && Game.area() !== 'combat' && Explored.fill(Game.areaKey(), 0) },
-        '-', { label: 'Unexplore all', act: () => confirm('Forget everything explored so far?') && Explored.clearAll() },
+        '-', { label: 'Unexplore all', act: () => Explored.clearAll() },
         '-', { label: 'Explore when gem / spell used', ...chk('peerExplore') }] },
       { label: 'Map elements', sub: [
         { label: 'World titles', ...chk('worldTitles') }, { label: 'Underworld titles', ...chk('underworldTitles') },
@@ -1646,7 +1851,7 @@ const Menu = {
           if (v !== null && +v > 0) { s.qfInterval = Math.trunc(+v); Settings.save(); }
         } },
         '-', { label: 'Insta-aiming', ...chk('qfAim') }] },
-      { label: 'Toggle quickfight', key: 'Q', disabled: !Quickfight.on && !Quickfight.possible(), act: () => Quickfight.toggle() },
+      { label: 'Toggle quickfight', key: 'Q', act: () => Quickfight.toggle() },   // always enabled, as the original's
       '-', { label: 'Auto level up', ...chk('autoLevelUp') },
       '-', { label: 'Inventory', key: 'I', act: () => Lists.open('inventory') },
       { label: 'Spells', key: 'S', act: () => Lists.open('spells') },
@@ -1733,172 +1938,602 @@ const Dlg = {
   },
 };
 
-// the original lists the spells in SAVED.GAM order: six a circle
-const SPELL_ORDER = SPELLS.map((_, i) => i);
+/* ------------------------------------------------------ lists window
+ * The original's spells and inventory window (its Inventory_Form): one canvas, drawn as its
+ * 459068 (spells) and 459BE4 (inventory) draw their bitmap, again when what it shows changed
+ * in the save or when told to. Its client area is the original's 648 x 776 (the original's
+ * when its HUD isn't shown; with the HUD it first covers DOSBox and the HUD). Keys: Esc hides
+ * it; Up / Down (8 / 2 on the keypad), Home and End move the choice; PageDown / PageUp make
+ * the window 16 pixels shorter / taller in its proportions; Enter mixes the chosen spell; Tab
+ * switches lists; R puts the window back. The mouse: moving chooses the row under it, a left
+ * click mixes that, a right click switches lists. The choice goes after 10 seconds (50 ticks
+ * of the original's 200 ms timer) without either. */
 
-// the spell list and the inventory share one window, like the original's
+// the original's spell list, by name within each circle: save index (0-47) and the reagents
+// needed (bit 0 ash ... bit 7 mandrake), Ultimapper's (Rel Xen Bet's and In Quas Xen's differ
+// from SPELLS')
+const LIST_SPELLS = [[3, 6], [5, 20], [2, 6], [1, 33], [0, 1], [4, 10], [6, 17], [7, 5], [9, 64], [11, 134], [10, 136],
+  [8, 17], [14, 41], [15, 104], [17, 24], [16, 42], [13, 33], [12, 129], [18, 33], [22, 24], [19, 7], [20, 168], [21, 24],
+  [23, 72], [25, 21], [24, 25], [26, 17], [28, 74], [29, 145], [27, 138], [34, 104], [32, 133], [30, 145], [31, 192],
+  [35, 201], [33, 129], [40, 81], [41, 196], [39, 192], [38, 155], [36, 208], [37, 96], [47, 148], [45, 145], [42, 159],
+  [44, 193], [43, 156], [46, 161]];
+// the inventory's names for 21A-289 (the spells' only count for the column width) and the
+// headings before items; the quest items (bytes, FF owned) and the reagents (2AA-2B1)
+const LIST_ITEMS = ['Leather Helm', 'Chain Coif', 'Iron Helm', 'Spiked Helm', 'Small Shield', 'Large Shield',
+  'Spiked Shield', 'Magic Shield', 'Jewelled Shield', 'Cloth', 'Leather', 'Ring Mail', 'Scale', 'Chain', 'Plate',
+  'Mystic Armor', 'Dagger', 'Sling', 'Club', 'Flaming Oil', 'Main Gauche', 'Spear', 'Throwing Axe', 'Short Sword',
+  'Mace', 'Morning Star', 'Bow', 'Arrows', 'Crossbow', 'Quarrels', 'Long Sword', '2H Hammer', '2H Axe', '2H Sword',
+  'Halberd', 'Chaos Sword', 'Magic Bow', 'Silver Sword', 'Magic Axe', 'Glass Sword', 'Jeweled Sword', 'Mystic Sword',
+  'Invisibility Ring', 'Protection Ring', 'Regeneration Ring', 'Amulet of Turning', 'Spiked Collar', 'Ankh',
+  ...SPELLS.map(s => s[0]),
+  'Vas Lor (Light)', 'Rel Hur (Change Wind)', 'In Sanct (Protection)', 'In An (Negate Magic)', 'In Quas Wis (Peer Map)',
+  'Kal Xen Corp (Summon Daemon)', 'In Mani Corp (Resurrect)', 'An Tym (Time Stop)', 'Blue (Awaken)', 'Yellow (Heal)',
+  'Red (Cure Poison)', 'Green (Poison)', 'Orange (Sleep)', 'Purple (Rat)', 'Black (Invisibility)', 'White (X-Ray)'];
+const LIST_HEADS = [[0, 'HELMETS'], [4, 'SHIELDS'], [9, 'ARMOR'], [16, 'WEAPONS'], [42, 'RINGS'], [45, 'AMULETS'],
+  [96, 'SCROLLS'], [104, 'POTIONS']];
+const LIST_QUEST = [[0x209, 'Grapple'], [0x20A, 'Magic carpet'], [0x214, 'Spy glass'], [0x215, 'HMS Cape plans'],
+  [0x216, 'Sextant'], [0x217, 'Pocket watch'], [0x218, 'Black Badge'], [0x20D, 'Amulet of Lord British'],
+  [0x20E, 'Crown of Lord British'], [0x20F, 'Sceptre of Lord British'], [0x212, 'Shard of Cowardice'],
+  [0x210, 'Shard of Falsehood'], [0x211, 'Shard of Hatred'], [0x219, 'Sandalwood Box']];
+const LIST_REAGENTS = ['Sulfur Ash', 'Ginseng', 'Garlic', 'Spider Silk', 'Blood Moss', 'Black Pearl', 'Nightshade',
+  'Mandrake Root'];
+// Verdana's character height (lfHeight -px) for a cell height (lfHeight +h, 0-50), as GDI picks
+// it (the same ascent, descent and widths); cells 8 and 9 have the widths of 6 and 7 with
+// GDI's own ascent and descent: [px, ascent, descent] (measured on Windows)
+const VERDANA_CELL = [1, 1, 1, 2, 3, 4, 5, 6, [6, 7, 1], [7, 7, 2], 8, 8, 9, 11, 12, 12, 13, 14, 15, 16, 17, 17, 18, 19,
+  19, 20, 22, 22, 23, 24, 24, 25, 26, 27, 28, 29, 30, 30, 31, 32, 33, 34, 35, 35, 36, 37, 38, 39, 40, 41, 41];
+
 const Lists = {
-  mode: null, sel: 0,
+  mode: 0, sel: 0, rows: 0, rects: [], can: [], seen: {}, force: false, idle: 0, pos: null,
+  w: 648, h: 776, home: [648, 776],   // the client area (its paint box and bitmap), the first one
+  frame: [16, 39],         // the window around it (a fixed window's on Windows 10 / 11): PageUp / PageDown size that
+  // Spells / Inventory in the menu, S / I, a click on the HUD's right part: that list, nothing
+  // chosen; shown already, the window back in its place (the original's 469A4C)
   open(mode) {
-    this.mode = mode;
-    const d = Dlg.make('lists', '', mode === 'spells' ? 640 : 780);
-    d.style.width = (mode === 'spells' ? 640 : 780) + 'px';
-    d.querySelector('.t').textContent = mode === 'spells' ? 'Spells' : 'Inventory';
-    d.tabIndex = 0;
-    d.onkeydown = e => {
-      if (e.key === 'Tab') { e.preventDefault(); this.open(this.mode === 'spells' ? 'inventory' : 'spells'); }
-      if (this.mode === 'spells') {
-        if (e.key === 'ArrowDown') { this.sel = Math.min(47, this.sel + 1); this.refresh(true); e.preventDefault(); }
-        if (e.key === 'ArrowUp') { this.sel = Math.max(0, this.sel - 1); this.refresh(true); e.preventDefault(); }
-        if (e.key === 'Enter') mixSpell(SPELL_ORDER[this.sel]);
-      }
-    };
-    d.oncontextmenu = e => { e.preventDefault(); this.open(this.mode === 'spells' ? 'inventory' : 'spells'); };
-    d.focus();
-    this.refresh(true);
+    if (!Game.save) return;
+    this.mode = mode === 'inventory' ? 1 : 0;
+    this.sel = 0; this.idle = Date.now();
+    const shown = document.getElementById('lists');
+    if (shown && this.pos) [shown.style.left, shown.style.top] = this.pos;
+    this.force = true;
+    this.window().focus();
+    this.refresh();
   },
-  refresh(force) {
+  // the window, made when it isn't shown; its caption the list's
+  window() {
+    let d = document.getElementById('lists');
+    if (!d) {
+      d = Dlg.make('lists', '', this.w + 2);
+      const body = d.querySelector('.body');
+      Object.assign(body.style, { padding: '0', overflow: 'hidden', background: '#000' });
+      const c = el('canvas', { id: 'listsCanvas', width: this.w, height: this.h });
+      c.style.display = 'block';
+      body.replaceChildren(c);
+      d.tabIndex = -1;
+      d.onkeydown = e => this.key(e);
+      c.onmousemove = e => this.move(e);
+      c.onmousedown = e => this.down(e);
+      c.oncontextmenu = e => e.preventDefault();
+      d.querySelector('header button').onclick = () => this.close();
+      if (this.pos) [d.style.left, d.style.top] = this.pos;
+      else this.pos = [d.style.left, d.style.top];   // its first place kept, as the original keeps it
+      this.force = true;
+    } else Dlg.make('lists');
+    d.querySelector('.t').textContent = this.mode ? 'Inventory' : 'Spells';
+    return d;
+  },
+  // hidden: nothing chosen, the place kept
+  close() {
     const d = document.getElementById('lists');
-    if (!d || !Game.save) return;
-    const s = Game.save, body = d.querySelector('.body');
-    const sig = this.mode + s.subarray(0x202, 0x2B2).join() + this.sel;
-    if (!force && sig === this.sig) return;
-    this.sig = sig;
-    body.replaceChildren(this.mode === 'spells' ? this.spells(s) : this.inventory(s));
+    if (!d) return;
+    this.pos = [d.style.left, d.style.top];
+    d.remove();
+    this.sel = 0;
   },
-  // L, N, spell, effect, how many can be mixed (the scarcest reagent, nothing at 99),
-  // the reagents (green: have some, red: none, a dash where not needed)
-  spells(s) {
-    const t = el('table', { className: 'list spells' }), have = r => s[0x2AA + r];
-    t.append(el('tr', {}, ...['L', 'N', 'SPELL', 'EFFECT', 'CAN MIX', ...REAGENT_ABBR.map(a => a.toUpperCase())]
-      .map((h, k) => el('th', { textContent: h, className: k < 2 || k > 3 ? 'c' : '' }))));
-    t.append(el('tr', { className: 'counts' }, el('td', { colSpan: 5 }),
-      ...REAGENT_ABBR.map((_, r) => el('td', { className: 'c' + (have(r) ? '' : ' dash'), textContent: have(r) || '-' }))));
-    SPELL_ORDER.forEach((i, row) => {
-      const [name, circle, mask, effect] = SPELLS[i], n = s[0x24A + i];
-      const need = REAGENT_ABBR.map((_, r) => mask >> r & 1);
+  // a new client size; home: the size R goes back to as well (the test gives the original's)
+  size(w, h, frame, home) {
+    if (frame) this.frame = frame;
+    if (home) this.home = [w, h];
+    this.w = w; this.h = h;
+    const c = document.getElementById('listsCanvas');
+    if (c) { c.width = w; c.height = h; document.getElementById('lists').style.width = w + 2 + 'px'; }
+    this.force = true;
+  },
+  // PageDown / PageUp: the window 16 pixels shorter (not below 400 either way) / taller, as wide
+  // as its proportions say
+  resize(d) {
+    let W = this.w + this.frame[0], H = this.h + this.frame[1];
+    if (H <= 0 || (d < 0 && (W - 16 < 400 || H - 16 < 400))) return false;
+    const ratio = Math.fround(W / H);
+    H += d;
+    W = Math.trunc(H * ratio);
+    this.size(W - this.frame[0], H - this.frame[1]);
+    return true;
+  },
+  at(e) { const r = e.target.getBoundingClientRect(); return [Math.floor(e.clientX - r.left), Math.floor(e.clientY - r.top)]; },
+  // the row at a point (1 up), 0 for none
+  hit(x, y) {
+    for (let i = 1; i <= this.rows; i++) {
+      const r = this.rects[i];
+      if (r && r[0] <= x && r[1] <= y && x <= r[2] && y <= r[3]) return i;
+    }
+    return 0;
+  },
+  move(e) {
+    this.idle = Date.now();
+    const was = this.sel;
+    this.sel = this.hit(...this.at(e));
+    if (this.sel !== was) { this.force = true; this.refresh(); }
+  },
+  down(e) {
+    if (e.button === 0) { this.idle = Date.now(); this.sel = this.hit(...this.at(e)); this.mix(); }
+    else if (e.button === 2) { this.mode ^= 1; this.window(); this.force = true; this.refresh(); }
+  },
+  key(e) {
+    const k = e.keyCode;
+    this.idle = Date.now();
+    if (k === 27) { e.preventDefault(); e.stopPropagation(); this.close(); return; }
+    if (k === 38 || k === 104) { if (this.sel > 1) { this.sel--; this.force = true; } }
+    else if (k === 40 || k === 98) { if (this.sel < this.rows) { this.sel++; this.force = true; } }
+    else if (k === 36) { if (this.sel > 1) { this.sel = 1; this.force = true; } }
+    else if (k === 35) { if (this.sel < this.rows) { this.sel = this.rows; this.force = true; } }
+    else if (k === 34) this.resize(-16);
+    else if (k === 33) this.resize(16);
+    else if (k === 13) this.mix();
+    else if (k === 9) { this.mode ^= 1; this.window(); this.force = true; }
+    else if (k === 82) { this.place(); this.force = true; }
+    if (![9, 13, 33, 34, 35, 36, 38, 40, 82, 98, 104].includes(k)) { e.stopPropagation(); return; }   // the main window's keys aren't this one's
+    e.preventDefault(); e.stopPropagation();
+    if (this.force) this.refresh();
+  },
+  // R: the window shown as if new (the original's FormShow): nothing chosen, back in its first
+  // size and place, which it keeps
+  place() {
+    this.sel = 0; this.idle = Date.now();
+    this.pos = null;
+    this.size(...this.home);
+    const d = document.getElementById('lists');
+    if (d) {
+      d.style.left = Math.max(10, (innerWidth - this.w - 2) / 2) + 'px'; d.style.top = '60px';
+      this.pos = [d.style.left, d.style.top];
+    }
+  },
+  // every tick, as the original's position timer: the choice gone after 10 s, then a redraw
+  // when needed
+  tick() {
+    if (!document.getElementById('lists')) return;
+    if (this.sel > 0 && Date.now() - this.idle >= 10000) { this.sel = 0; this.idle = Date.now(); this.force = true; }
+    this.refresh();
+  },
+  // the original's 45A504: drawn again when told to, or when what the list shows changed (spells:
+  // their counts and the reagents; inventory: 209-289 and the reagents)
+  refresh() {
+    const c = document.getElementById('listsCanvas');
+    if (!c || !Game.save) return;
+    const s = Game.save, seen = this.seen, same = (k, from, to) => seen[k] && seen[k].every((v, i) => v === s[from + i]);
+    const changed = this.force || !same('reagents', 0x2AA, 0x2B2) ||
+      (this.mode ? !same('items', 0x21A) || !same('quest', 0x209) : !same('spells', 0x24A));
+    this.force = false;
+    if (!changed) return;
+    const g = c.getContext('2d');
+    g.fillStyle = '#000000';
+    g.fillRect(0, 0, c.width, c.height);
+    if (this.mode) this.drawInventory(g, c.width, c.height); else this.drawSpells(g, c.width, c.height);
+    for (const [k, from, n] of [['reagents', 0x2AA, 8], ['items', 0x21A, 112], ['quest', 0x209, 17], ['spells', 0x24A, 48]])
+      if (k === 'reagents' || (this.mode ? k !== 'spells' : k === 'spells')) seen[k] = [...s.subarray(from, from + n)];
+  },
+  font(g, cell) {
+    const f = VERDANA_CELL[clamp(cell, 0, VERDANA_CELL.length - 1)];
+    if (Array.isArray(f)) Gdi.font(g, f[0], 'Verdana', f[1], f[2], cell);
+    else Gdi.font(g, f, 'Verdana', undefined, undefined, cell);
+  },
+  // L, N, spell, effect, how many can be mixed (the scarcest needed reagent, none at 99), the
+  // reagents: a band of headings and the party's reagents above
+  drawSpells(g, W, H) {
+    const s = Game.save, m = round(W / 50), fh = Math.trunc((H - 2 * m - 58) / 50), half = Math.trunc(fh / 2);
+    this.font(g, fh);
+    const tw = t => Gdi.width(g, t);
+    const w8 = tw('8'), w888 = tw('888'), wMan = tw('MAN'), wSp = tw('   ');
+    const wName = Math.max(...LIST_SPELLS.map(([o]) => tw(SPELLS[o][0]))), wEff = Math.max(...LIST_SPELLS.map(([o]) => tw(SPELLS[o][3])));
+    const x0 = Math.trunc((W - w8 - w888 - wName - wEff - 9 * wMan - 7 * wSp - 7 * fh) / 2);
+    let y = Math.trunc((H - 50 * fh - 58) / 2);
+    const text = (t, x, colour) => { g.fillStyle = colour; Gdi.text(g, t, x, y); };
+    const right = (t, x, w, colour) => text(t, x + w - tw(t), colour);
+    this.rects = [];
+    g.fillStyle = '#222222';
+    g.fillRect(x0 - half, y, W - 2 * x0 + 2 * half, fh);
+    let x = x0;
+    text('L', x, '#888888'); x += w8 + fh;
+    right('N', x, w888, '#888888'); x += w888 + fh;
+    text('SPELL', x, '#888888'); x += wName + fh;
+    text('EFFECT', x, '#888888'); x += wEff + 2 * fh;
+    right('CAN MIX', x, wMan, '#888888'); x += 2 * fh + wMan;
+    for (const a of REAGENT_ABBR) { right(a.toUpperCase(), x, wMan, '#888888'); x += wMan + wSp; }
+    y += fh + 5;
+    x = x0 + w8 + w888 + wName + wEff + wMan + 7 * fh;
+    for (let r = 0; r < 8; r++) {
+      const v = s[0x2AA + r];
+      right(v ? String(v) : '-', x, wMan, v ? '#888888' : '#444444');
+      x += wMan + wSp;
+    }
+    y += fh + 5;
+    this.can = [];
+    LIST_SPELLS.forEach(([o, mask], k) => {
+      const i = k + 1, n = s[0x24A + o];
+      this.rects[i] = [x0, y, W - x0, y + fh];
       let can = 0;
       if (n < 99) for (let r = 0; r < 8; r++) {
-        if (!need[r]) continue;
-        if (!have(r)) { can = 0; break; }
-        if (have(r) < can || can === 0) can = have(r);
+        if (!(mask >> r & 1)) continue;
+        const v = s[0x2AA + r];
+        if (!v) { can = 0; break; }
+        if (v < can || can === 0) can = v;
       }
-      const tr = el('tr', { className: (row === this.sel ? 'sel ' : '') + (n ? 'known' : 'na'),
-        onclick: () => { this.sel = row; mixSpell(i); } },
-        el('td', { className: 'c', textContent: circle }), el('td', { className: 'c', textContent: n }),
-        el('td', { textContent: name }), el('td', { textContent: effect }),
-        el('td', { className: 'c ' + (can > 0 ? 'mix' : 'dash'), textContent: can > 0 ? can : '-' }),
-        ...need.map((x, r) => el('td', { className: 'c ' + (x ? (have(r) ? 'got' : 'miss') : 'dash'), textContent: x ? REAGENT_ABBR[r] : '-' })));
-      t.append(tr);
+      this.can[i] = can;
+      let colour;
+      if (this.sel === i) {
+        g.fillStyle = '#222266';
+        g.fillRect(x0 - half, y, W - 2 * x0 + 2 * half, fh);
+        colour = n > 0 ? '#CCCCCC' : '#888888';
+      } else colour = n > 0 ? '#AAAAAA' : '#444444';
+      x = x0;
+      text(String(Math.trunc((i - 1) / 6) + 1), x, colour); x += w8 + fh;
+      right(String(n), x, w888, colour); x += w888 + fh;
+      text(SPELLS[o][0], x, colour); x += wName + fh;
+      text(SPELLS[o][3], x, colour); x += 2 * fh + wEff;
+      right(can > 0 ? String(can) : '-', x, wMan, can > 0 ? '#228822' : '#444444'); x += 2 * fh + wMan;
+      for (let r = 0; r < 8; r++) {
+        if (mask >> r & 1) right(REAGENT_ABBR[r], x, wMan, s[0x2AA + r] > 0 ? '#228822' : '#882222');
+        else right('-', x, wMan, '#444444');
+        x += wMan + wSp;
+      }
+      y += fh + 1;
     });
-    return t;
+    this.rows = LIST_SPELLS.length;
   },
-  // every item in three columns of groups, the ones the party has bright
-  inventory(s) {
-    const box = el('div', { className: 'inv' });
-    for (const col of INVENTORY) {
-      const c = el('div');
-      for (const [title, items] of col) {
-        c.append(el('h4', { textContent: title }));
-        for (const [off, name, note] of items) {
-          const n = s[off] === 0xFF ? 1 : s[off];   // the pocket watch is FF when owned
-          c.append(el('div', { className: n ? 'got' : '' }, el('span', { className: 'n' + (n ? '' : ' dash'), textContent: n || '-' }),
-            el('span', { textContent: name }), ...(note ? [el('span', { className: 'note', textContent: `(${note})` })] : [])));
+  // three columns: helmets, shields, armour, then the quest items; weapons, rings, amulets;
+  // scrolls and potions, then the reagents; a count (FF of a quest item: 1) and a name each,
+  // an effect after it greyer
+  drawInventory(g, W, H) {
+    const s = Game.save, m = round(W / 20), fh = Math.trunc((H - 2 * m - 44) / 44), line = fh + 1;
+    this.rows = 0; this.rects = [];
+    this.font(g, fh);
+    const tw = t => Gdi.width(g, t);
+    const w999 = tw('999'), wSp = tw('   '), colW = Math.max(...LIST_ITEMS.map(tw)) + w999 + wSp;
+    const y0 = Math.trunc((H - 44 * fh - 44) / 2);
+    let x = Math.trunc((W - 3 * colW) / 2), y = y0, col1 = [0, 0], off = 0x21A;
+    const text = (t, x, colour) => { g.fillStyle = colour; Gdi.text(g, t, x, y); };
+    const count = (v, x, quest) => {
+      const t = v === 0 ? '-' : quest && v === 255 ? '1' : String(v);
+      text(t, x + w999 - tw(t), v ? '#CCCCCC' : '#444444');
+    };
+    [[0, 15], [16, 47], [96, 111]].forEach(([first, last], part) => {
+      if (part === 0) col1[0] = x;
+      else { if (part === 1) col1[1] = y; x += colW; }
+      if (part === 2) off = 0x27A;
+      y = y0;
+      for (let k = first; k <= last; k++) {
+        const head = LIST_HEADS.find(h => h[0] === k);
+        if (head) {
+          if (k > first) y += 2 * line;
+          text(head[1], x, '#CCCCCC');
+          y += 2 * line;
         }
+        count(s[off], x);
+        let name = LIST_ITEMS[k], note = '';
+        const p = name.indexOf('(');
+        if (p >= 0) { note = name.slice(p); name = name.slice(0, p); }
+        text(name, x + w999 + wSp, '#888888');
+        if (note) text('  ' + note, x + w999 + wSp + tw(name), '#555555');
+        off++;
+        y += line;
       }
-      box.append(c);
+    });
+    y += 2 * line;
+    text('REAGENTS', x, '#CCCCCC');
+    y += 2 * line;
+    LIST_REAGENTS.forEach((name, r) => {
+      count(s[0x2AA + r], x);
+      text(name, x + w999 + wSp, '#888888');
+      y += line;
+    });
+    [x, y] = col1;
+    y += 2 * line;
+    text('QUEST ITEMS', x, '#CCCCCC');
+    y += 2 * line;
+    for (const [o, name] of LIST_QUEST) {
+      count(s[o], x, true);
+      text(name, x + w999 + wSp, '#888888');
+      y += line;
     }
-    return box;
   },
+  // Enter or a click: the chosen spell mixed, as the original's 4698E8 does it
+  mix() { if (this.mode === 0 && this.sel > 0 && this.sel <= this.rows) mixSpell(this.sel); },
 };
 
-// mixes one of spell i, using one of each of its reagents (like the game's Mix command)
-async function mixSpell(i) {
-  const [name, , mask] = SPELLS[i], s = Game.save;
-  if (Game.loc === 0xFF && Game.combat().hostiles > 0) { log('Not while fighting'); return; }
-  const rs = REAGENTS.map((_, r) => mask >> r & 1);
-  if (rs.some((need, r) => need && !s[0x2AA + r])) { log(`Not enough reagents for ${name}`); return; }
-  if (s[0x24A + i] >= 99) return;
-  const reag = [...s.subarray(0x2AA, 0x2B2)].map((v, r) => v - rs[r]);
-  await Game.writeSave(0x2AA, reag);
-  await Game.writeSave(0x24A + i, [s[0x24A + i] + 1]);
-  log(`Mixed ${name} (${s[0x24A + i]} now)`);
-  Lists.refresh(true);
+// mixes one of the list's spell row (1 up) as the original: when the game is found, no hostile
+// creature counted in the last combat look and the list can mix one, the spell's count + 1 and
+// each needed reagent the party has - 1
+async function mixSpell(row) {
+  const s = Game.save;
+  if (!s || !Game.active || Game.hostiles > 0 || !Lists.can[row]) return;
+  const [o, mask] = LIST_SPELLS[row - 1];
+  await Game.writeSave(0x24A + o, [s[0x24A + o] + 1 & 255]);
+  for (let r = 0; r < 8; r++) if (mask >> r & 1 && s[0x2AA + r]) await Game.writeSave(0x2AA + r, [s[0x2AA + r] - 1]);
 }
 
-/* ----------------------------------------------------------- editor */
+/* ----------------------------------------------------------- editor
+ * The original's editor (Debug, Editor): its form with its controls at their places and by
+ * their names (the test reads them so). Shown, it lists the 16 records' names, fills the
+ * party's consumables, quest items, karma and item list from the last poll and picks the
+ * first record; a click on a record fills that record's fields. - and + change the chosen
+ * item's count in the list (0 to 99). Save changes writes, from the last poll with the
+ * controls over it: the record, 202-219 (consumables, quest items), karma when it changed
+ * and the counts the list has (21A-289, 2AA-2B1). A number that isn't one keeps the old
+ * value; hit points, experience, food and gold become 30 then, like the original's. */
+
+// the program's names for the equipment bytes 0-2F (its combo boxes have the same)
+const ED_EQUIP = ['Leather Helm', 'Chain Coif', 'Iron Helm', 'Spiked Helm', 'Small Shield', 'Large Shield',
+  'Spiked Shield', 'Magic Shield', 'Jewelled Shield', 'Cloth', 'Leather', 'Ring Mail', 'Scale', 'Chain', 'Plate',
+  'Mystic Armor', 'Dagger', 'Sling', 'Club', 'Flaming Oil', 'Main Gauche', 'Spear', 'Throwing Axe', 'Short Sword',
+  'Mace', 'Morning Star', 'Bow', 'Arrows', 'Crossbow', 'Quarrels', 'Long Sword', '2h Hammer', '2h Axe', '2h Sword',
+  'Halberd', 'Sword of Chaos', 'Magic Bow', 'Silver Sword', 'Magic Axe', 'Glass Sword', 'Jeweled Sword',
+  'Mystic Sword', 'Invisibility Ring', 'Protection Ring', 'Regeneration Ring', 'Amulet of Turning', 'Spiked Collar',
+  'Ankh'];
+// the item list's names for 21A-289 and 2AA-2B1 in the save's order, '*' before a heading
+const ED_ITEMS = ['*HELMETS', 'Leather Helm', 'Chain Coif', 'Iron Helm', 'Spiked Helm', '*SHIELDS', 'Small Shield',
+  'Large Shield', 'Spiked Shield', 'Magic Shield', 'Jewelled Shield', '*ARMOR', 'Cloth', 'Leather', 'Ring Mail',
+  'Scale', 'Chain', 'Plate', 'Mystic Armor', '*WEAPONS', 'Dagger', 'Sling', 'Club', 'Flaming Oil', 'Main Gauche',
+  'Spear', 'Throwing Axe', 'Short Sword', 'Mace', 'Morning Star', 'Bow', 'Arrows', 'Crossbow', 'Quarrels',
+  'Long Sword', '2H Hammer', '2H Axe', '2H Sword', 'Halberd', 'Chaos Sword', 'Magic Bow', 'Silver Sword', 'Magic Axe',
+  'Glass Sword', 'Jeweled Sword', 'Mystic Sword', '*RINGS', 'Invisibility Ring', 'Protection Ring',
+  'Regeneration Ring', '*AMULETS', 'Amulet of Turning', 'Spiked Collar', 'Ankh', '*SPELL MIXTURES',
+  ...SPELLS.map(s => s[0]), '*SCROLLS', ...SCROLLS.map(n => n + ' - scroll'), '*POTIONS',
+  ...POTIONS.map(n => n + ' Potion')];
+const ED_REAGENTS = ['*REAGENTS', 'Sulfur Ash', 'Ginseng', 'Garlic', 'Spider Silk', 'Blood Moss', 'Black Pearl',
+  'Nightshade', 'Mandrake Root'];
+const ED_LOOK = ED_ITEMS.filter(n => n[0] !== '*'), ED_REAGENT_LOOK = ED_REAGENTS.slice(1);
+// the list's name column: as long as the longest name (a line is the name in 22 columns and the count in 3)
+const ED_NAME_LEN = Math.max(...ED_LOOK.map(n => n.length), ...ED_REAGENT_LOOK.map(n => n.length));
+// the quest items' check boxes and bytes: FF when had (the magic carpets a count)
+const ED_QUEST = [[0x209, 'Grapple'], [0x20A, 'MagicCarpet'], [0x214, 'Spyglass'], [0x215, 'HMSCapePlans'],
+  [0x216, 'Sextant'], [0x217, 'PocketWatch'], [0x218, 'BlackBadge'], [0x20D, 'Amulet'], [0x20E, 'Crown'],
+  [0x20F, 'Sceptre'], [0x210, 'Falsehood'], [0x211, 'Hatred'], [0x212, 'Cowardice'], [0x219, 'SandalwoodBox']];
+const ED_SLOTS = ['Helmet_ComboBox', 'Armor_ComboBox', 'Weapon_ComboBox', 'Shield_ComboBox', 'Ring_ComboBox', 'Amulet_ComboBox'];
+
+// Delphi's StrToIntDef: spaces before, a sign, decimal or $ / 0x hex digits; anything else, or
+// a number out of the Integer range, gives the default
+function strToIntDef(s, def) {
+  const m = /^ *([+-]?)(?:(?:\$|0x|x)([0-9a-f]+)|(\d+))$/i.exec(s);
+  if (!m) return def;
+  const v = m[2] !== undefined ? parseInt(m[2], 16) : parseInt(m[3], 10), r = m[1] === '-' ? -v : v;
+  return r < -2147483648 || r > 2147483647 ? def : r;
+}
 
 const Editor = {
-  cur: 0,
-  open(index) {
+  c: {}, k: {},
+  // shown already: to the front, as it is; else built and filled
+  open() {
     if (!Game.save) return;
-    if (index !== undefined) this.cur = index;
-    const d = Dlg.make('editor', 'Editor', 640);
-    this.render(d.querySelector('.body'));
+    if (document.getElementById('editor')) { Dlg.make('editor'); return; }
+    this.build();
+    this.formShow();
   },
-  render(body) {
-    const s = Game.save;
-    const chars = el('div', { className: 'chars' });
-    for (let i = 0; i < 16; i++) {
-      const o = 2 + i * 32;
-      let name = ''; for (let k = 0; k < 9 && s[o + k]; k++) name += String.fromCharCode(s[o + k]);
-      const st = s[o + 0x1F] === 0 ? 'party' : s[o + 0x1F] === 0xFF ? '' : 'inn';
-      chars.append(el('button', { className: i === this.cur ? 'sel' : '', textContent: `${name || '-'} ${st ? '(' + st + ')' : ''}`,
-        onclick: () => { this.cur = i; this.render(body); } }));
+  close() { document.getElementById('editor')?.remove(); },
+
+  // ---- the form (the original's places and sizes)
+  build() {
+    const d = Dlg.make('editor', 'Editor', 819), body = d.querySelector('.body');
+    body.style.padding = '0';
+    d.tabIndex = -1;
+    d.onkeydown = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.close(); } };
+    const F = el('div', { className: 'edf' });
+    body.replaceChildren(F);
+    this.c = {}; this.k = {};
+    const put = (p, e, l, t, w, h) => { Object.assign(e.style, { left: l + 'px', top: t + 'px', width: w + 'px', height: h + 'px' }); p.append(e); return e; };
+    const reg = (name, kind, e) => { this.c[name] = e; this.k[name] = kind; return e; };
+    const group = (text, l, t, w, h) => put(F, el('div', { className: 'eg' }, el('span', { className: 'egt', textContent: text })), l, t, w, h);
+    const label = (p, text, l, t, w) => put(p, el('div', { className: 'el', textContent: text }), l, t, w, 16);
+    const edit = (p, name, l, t, w) => reg(name, 'edit', put(p, el('input', { type: 'text', spellcheck: false, autocomplete: 'off' }), l, t, w, 24));
+    const combo = (p, name, l, t, w, items) => {
+      const e = reg(name, 'combo', put(p, el('select'), l, t, w, 24));
+      e.append(...items.map(x => el('option', { textContent: x })));
+      e.selectedIndex = -1;
+      return e;
+    };
+    const check = (p, name, text, l, t, w) => { const i = el('input', { type: 'checkbox' }); put(p, el('label', { className: 'ec' }, i, text), l, t, w, 17); return reg(name, 'check', i); };
+    const button = (p, name, text, l, t, w, act) => reg(name, 'button', put(p, el('button', { textContent: text, onclick: act }), l, t, w, 25));
+    const list = (p, name, l, t, w, h, act, cls = '') => { const e = reg(name, 'list', put(p, el('div', { className: 'elb ' + cls }), l, t, w, h)); Object.assign(e, { items: [], index: -1, act }); return e; };
+
+    const C = group(' Characters ', 16, 8, 489, 305);
+    [['Gender', 116, 28, 41], ['Class', 127, 52, 30], ['Status', 121, 76, 36], ['STR', 133, 108, 24], ['DEX', 134, 132, 23],
+      ['INT', 137, 156, 20], ['HP', 142, 188, 15], ['MP', 140, 212, 17], ['XP', 142, 244, 15], ['Level', 128, 268, 29],
+      ['Helmet', 285, 28, 40], ['Armor', 289, 52, 36], ['Weapon', 278, 76, 47], ['Shield', 290, 100, 35], ['Ring', 300, 124, 25],
+      ['Amulet', 285, 148, 40], ['Unknown', 273, 180, 52]].forEach(([t, l, y, w]) => label(C, t, l, y, w));
+    list(C, 'Characters_ListBox', 16, 24, 81, 265, i => this.fill(i));
+    combo(C, 'Gender_ComboBox', 168, 24, 89, ['Male', 'Female']);
+    combo(C, 'Class_ComboBox', 168, 48, 89, ['Avatar', 'Bard', 'Fighter', 'Mage']);
+    combo(C, 'Status_ComboBox', 168, 72, 89, ['Good', 'Sleeping', 'Poisoned', 'Dead']);
+    edit(C, 'STR_Edit', 168, 104, 41); edit(C, 'DEX_Edit', 168, 128, 41); edit(C, 'INT_Edit', 168, 152, 41);
+    edit(C, 'CurrentHP_Edit', 168, 184, 41); edit(C, 'MaximumHP_Edit', 216, 184, 41); edit(C, 'MP_Edit', 168, 208, 41);
+    edit(C, 'XP_Edit', 168, 240, 57); edit(C, 'Level_Edit', 168, 264, 41);
+    const E = ED_EQUIP, hands = ['-', ...E.slice(16, 42), ...E.slice(4, 9)];
+    combo(C, 'Helmet_ComboBox', 336, 24, 137, ['-', ...E.slice(0, 4)]);
+    combo(C, 'Armor_ComboBox', 336, 48, 137, ['-', ...E.slice(9, 16)]);
+    combo(C, 'Weapon_ComboBox', 336, 72, 137, hands);
+    combo(C, 'Shield_ComboBox', 336, 96, 137, hands);
+    combo(C, 'Ring_ComboBox', 336, 120, 137, ['-', ...E.slice(42, 45)]);
+    combo(C, 'Amulet_ComboBox', 336, 144, 137, ['-', ...E.slice(45, 48)]);
+    edit(C, 'O17_Edit', 336, 176, 41); edit(C, 'O18_Edit', 384, 176, 41);
+
+    const K = group(' Consumables ', 16, 328, 145, 201);
+    [['Food', 41, 28, 28], ['Gold', 44, 52, 25], ['Torches', 23, 76, 46], ['Keys', 43, 108, 26], ['Skull keys', 13, 132, 56],
+      ['Gems', 37, 164, 32]].forEach(([t, l, y, w]) => label(K, t, l, y, w));
+    edit(K, 'Food_Edit', 80, 24, 49); edit(K, 'Gold_Edit', 80, 48, 49); edit(K, 'Torches_Edit', 80, 72, 49);
+    edit(K, 'Keys_Edit', 80, 104, 49); edit(K, 'SkullKeys_Edit', 80, 128, 49); edit(K, 'Gems_Edit', 80, 160, 49);
+
+    const Q = group(' Quest items ', 184, 328, 321, 201);
+    [['Grapple', 'Grapple'], ['MagicCarpet', 'Magic carpet'], ['Spyglass', 'Spy glass'], ['HMSCapePlans', 'HMS Cape plans'],
+      ['Sextant', 'Sextant'], ['PocketWatch', 'Pocket watch'], ['BlackBadge', 'Black Badge']]
+      .forEach(([n, t], i) => check(Q, n + '_CheckBox', t, 16, 24 + 24 * i, 129));
+    [['Amulet', 'Amulet of Lord British'], ['Crown', 'Crown of Lord British'], ['Sceptre', 'Sceptre of Lord British'],
+      ['Cowardice', 'Shard of Cowardice'], ['Falsehood', 'Shard of Falsehood'], ['Hatred', 'Shard of Hatred'],
+      ['SandalwoodBox', 'Sandalwood Box']].forEach(([n, t], i) => check(Q, n + '_CheckBox', t, 152, 24 + 24 * i, 153));
+
+    const M = group(' Miscellaneous ', 528, 8, 273, 65);
+    label(M, 'Karma', 24, 28, 37);
+    edit(M, 'Karma_Edit', 72, 24, 49);
+
+    const I = group(' Inventory ', 528, 88, 273, 393);
+    list(I, 'Items_ListBox', 16, 24, 241, 313, () => this.itemClick(), 'mono');
+    button(I, 'Decrease_Button', '-', 168, 352, 41, () => this.step(-1));
+    button(I, 'Increase_Button', '+', 216, 352, 41, () => this.step(1));
+    button(F, 'SaveChanges_Button', 'Save changes', 664, 504, 137, () => this.save());
+  },
+
+  // ---- the controls
+  text(n) { const e = this.c[n]; return e.selectedIndex >= 0 ? e.options[e.selectedIndex].textContent : ''; },
+  index(n, i) { const e = this.c[n]; e.selectedIndex = i >= 0 && i < e.options.length ? i : -1; },
+  // a combo box's first entry with the text, any case (CB_FINDSTRINGEXACT), or -1
+  find(n, t) { return [...this.c[n].options].findIndex(o => o.textContent.toLowerCase() === t.toLowerCase()); },
+  setList(n, items, index = -1) { const e = this.c[n]; e.items = items; e.index = index; this.drawList(e); },
+  drawList(e) {
+    e.replaceChildren(...e.items.map((t, i) => el('div', { className: i === e.index ? 'sel' : '', textContent: t || ' ',
+      onclick: () => { e.index = i; this.drawList(e); e.act?.(i); } })));
+  },
+  // a control used as a click or a choice (the test's way in), a text typed
+  pick(n, i) {
+    const e = this.c[n], k = this.k[n];
+    if (k === 'list') { e.index = i; this.drawList(e); return e.act?.(i); }
+    if (k === 'combo') return this.index(n, i);
+    if (k === 'check') { if (!e.disabled) e.checked = !!i; return; }   // a disabled one takes no click
+    if (k === 'button') return e.disabled ? undefined : e.onclick?.();
+  },
+  set(n, v) { this.c[n].value = v; },
+  // what the controls hold, by the original's names (the test compares them with its)
+  values() {
+    const out = {};
+    for (const [n, e] of Object.entries(this.c)) {
+      const k = this.k[n];
+      if (k === 'edit') out[n] = { text: e.value, enabled: !e.disabled };
+      else if (k === 'combo') out[n] = { text: this.text(n), items: [...e.options].map(o => o.textContent), enabled: !e.disabled };
+      else if (k === 'check') out[n] = { checked: e.checked, enabled: !e.disabled };
+      else if (k === 'button') out[n] = { enabled: !e.disabled };
+      else if (k === 'list') out[n] = { items: e.items.slice(), index: e.index, enabled: true };
     }
-    const o = 2 + this.cur * 32, f = el('div');
-    const num = (label, off, size = 1, max = size === 1 ? 255 : 9999) => {
-      const v = size === 1 ? s[o + off] : s[o + off] | s[o + off + 1] << 8;
-      const inp = el('input', { type: 'number', min: 0, max, value: v });
-      inp.onchange = () => {
-        const n = Math.max(0, Math.min(max, +inp.value | 0));
-        Game.writeSave(o + off, size === 1 ? [n] : [n & 255, n >> 8]).then(() => log(`${label} = ${n}`));
-      };
-      return el('label', {}, el('span', { textContent: label }), inp);
-    };
-    const pick = (label, off, options) => {
-      const sel = el('select');
-      for (const [v, n] of options) sel.append(el('option', { value: v, textContent: n, selected: s[o + off] === v }));
-      sel.onchange = () => Game.writeSave(o + off, [+sel.value]).then(() => log(`${label} = ${sel.selectedOptions[0].textContent}`));
-      return el('label', {}, el('span', { textContent: label }), sel);
-    };
-    const eqOpts = (from, to) => [[0xFF, '(none)'], ...ITEMS.slice(from, to).map((n, k) => [from + k, n])];
-    const hands = [...eqOpts(16, 42), ...eqOpts(4, 9).slice(1)];   // either hand: any weapon or shield, like the original
-    f.append(
-      pick('Gender', 0x09, [[0x0B, 'Male'], [0x0C, 'Female']]),
-      pick('Class', 0x0A, Object.entries(CLASSES).map(([k, v]) => [+k, v])),
-      pick('Status', 0x0B, Object.entries(STATUS).map(([k, v]) => [+k, v])),
-      num('Strength', 0x0C), num('Dexterity', 0x0D), num('Intelligence', 0x0E), num('Magic points', 0x0F),
-      num('Hit points', 0x10, 2, 999), num('Max hit points', 0x12, 2, 999), num('Experience', 0x14, 2, 9999),
-      num('Level', 0x16, 1, 8),
-      pick('Helm', 0x19, eqOpts(0, 4)), pick('Armour', 0x1A, eqOpts(9, 16)), pick('Weapon', 0x1B, hands),
-      pick('Shield', 0x1C, hands), pick('Ring', 0x1D, eqOpts(42, 45)), pick('Amulet', 0x1E, eqOpts(45, 48)),
-      num('Unknown (17)', 0x17), num('Unknown (18)', 0x18),
-      pick('Party', 0x1F, [[0, 'In the party'], [0xFF, 'Not joined'], [1, 'At an inn']]));
-    // party inventory
-    const inv = el('div', { style: 'margin-top:10px' }, el('div', { className: 'muted', textContent: 'Party inventory' }));
-    const invGrid = el('div', { className: 'grid2' });
-    const invNum = (label, off, size = 1, max = size === 1 ? 99 : 9999) => {
-      const v = size === 1 ? s[off] : s[off] | s[off + 1] << 8;
-      const inp = el('input', { type: 'number', min: 0, max, value: v });
-      inp.onchange = () => { const n = Math.max(0, Math.min(max, +inp.value | 0)); Game.writeSave(off, size === 1 ? [n] : [n & 255, n >> 8]).then(() => log(`${label} = ${n}`)); };
-      invGrid.append(el('span', { textContent: label }), inp);
-    };
-    invNum('Food', 0x202, 2); invNum('Gold', 0x204, 2);
-    for (const [off, n, flag] of SPECIAL) {
-      if (!flag) { invNum(n, off, 1, 99); continue; }
-      const cb = el('input', { type: 'checkbox', checked: !!s[off] });   // quest items: had or not
-      cb.onchange = () => Game.writeSave(off, [cb.checked ? (off === 0x217 ? 0xFF : 1) : 0]).then(() => log(`${n} ${cb.checked ? 'given' : 'taken'}`));
-      invGrid.append(el('span', { textContent: n }), cb);
+    return out;
+  },
+
+  // a record's name: up to 9 characters, to the first 0
+  name(o) {
+    let s = '';
+    for (let k = 0; k < 9 && Game.save[o + k]; k++) s += String.fromCharCode(Game.save[o + k]);
+    return s;
+  },
+  // an item list line: the name in 22 columns, a space, the count in 3 (none for 0)
+  line(name, n) { return name.slice(0, 22).padEnd(22) + ' ' + (n < 1 ? '' : String(n)).padStart(3); },
+  // a line's name, save offset (-1 for a heading or a blank) and count, and whether - and + may
+  parse(line) {
+    const name = line.slice(0, ED_NAME_LEN).trim(), off = this.offset(name);
+    if (off < 0) return { name, off, n: 0, dec: false, inc: false };
+    const n = strToIntDef(line.slice(ED_NAME_LEN).trim(), 0);
+    return { name, off, n, dec: n >= 1, inc: n < 99 };
+  },
+  offset(name) {
+    if (!name) return -1;
+    let k = ED_LOOK.indexOf(name);
+    if (k >= 0) return 0x21A + k;
+    k = ED_REAGENT_LOOK.indexOf(name);
+    return k >= 0 ? 0x2AA + k : -1;
+  },
+
+  // ---- shown: the names, the party's things, the first record
+  formShow() {
+    const s = Game.save, t = (n, v) => { this.c[n].value = String(v); };
+    this.setList('Characters_ListBox', Array.from({ length: 16 }, (_, i) => this.name(2 + i * 32)));
+    t('Food_Edit', s[0x202] | s[0x203] << 8); t('Gold_Edit', s[0x204] | s[0x205] << 8); t('Torches_Edit', s[0x208]);
+    t('Keys_Edit', s[0x206]); t('SkullKeys_Edit', s[0x20B]); t('Gems_Edit', s[0x207]);
+    for (const [off, n] of ED_QUEST) this.c[n + '_CheckBox'].checked = !!s[off];
+    t('Karma_Edit', s[0x2E2]);
+    const lines = [];
+    for (const [names, first] of [[ED_ITEMS, 0x21A], [ED_REAGENTS, 0x2AA]]) {
+      let o = first;
+      for (const name of names) {
+        if (name[0] !== '*') { lines.push(this.line(name, s[o++])); continue; }
+        if (lines.length) lines.push('');
+        lines.push(name.slice(1), '');
+      }
     }
-    ITEMS.forEach((n, i) => invNum(n, 0x21A + i));
-    SCROLLS.forEach((n, i) => invNum('Scroll: ' + n, 0x27A + i));
-    POTIONS.forEach((n, i) => invNum(n + ' potion', 0x282 + i));
-    REAGENTS.forEach((n, i) => invNum(n, 0x2AA + i));
-    SPELLS.forEach(([n], i) => invNum('Spell: ' + n, 0x24A + i));
-    invNum('Karma', 0x2E2, 1, 99);
-    inv.append(invGrid);
-    body.replaceChildren(el('div', { className: 'ed' }, chars, el('div', {}, f, inv)));
+    this.setList('Items_ListBox', lines);
+    this.c.Decrease_Button.disabled = this.c.Increase_Button.disabled = true;
+    this.pick('Characters_ListBox', 0);
+  },
+  // a record's fields; equipment by the program's names (one a list hasn't: '-')
+  fill(i) {
+    const s = Game.save, o = 2 + i * 32, t = (n, v) => { this.c[n].value = String(v); };
+    this.index('Gender_ComboBox', s[o + 9] === 0x0B ? 0 : 1);
+    this.index('Class_ComboBox', { 0x41: 0, 0x42: 1, 0x46: 2, 0x4D: 3 }[s[o + 10]] ?? 0);
+    this.index('Status_ComboBox', { 0x47: 0, 0x53: 1, 0x50: 2, 0x44: 3 }[s[o + 11]] ?? 0);
+    t('STR_Edit', s[o + 12]); t('DEX_Edit', s[o + 13]); t('INT_Edit', s[o + 14]);
+    t('CurrentHP_Edit', s[o + 16] | s[o + 17] << 8); t('MaximumHP_Edit', s[o + 18] | s[o + 19] << 8);
+    t('MP_Edit', s[o + 15]); t('XP_Edit', s[o + 20] | s[o + 21] << 8); t('Level_Edit', s[o + 22]);
+    t('O17_Edit', s[o + 23]); t('O18_Edit', s[o + 24]);
+    ED_SLOTS.forEach((n, k) => { const v = s[o + 25 + k]; this.index(n, v < 0x30 ? Math.max(0, this.find(n, ED_EQUIP[v])) : 0); });
+  },
+  // the chosen line: - when it has some, + below 99
+  itemClick() {
+    const L = this.c.Items_ListBox;
+    if (L.index < 0) return;
+    const r = this.parse(L.items[L.index]);
+    this.c.Decrease_Button.disabled = !r.dec;
+    this.c.Increase_Button.disabled = !r.inc;
+  },
+  step(d) {
+    const L = this.c.Items_ListBox;
+    if (L.index < 0) return;
+    const r = this.parse(L.items[L.index]);
+    if (r.off < 0 || (d < 0 && !r.dec) || (d > 0 && !r.inc)) return;
+    L.items[L.index] = this.line(r.name, r.n + d);
+    this.drawList(L);
+    this.itemClick();
+  },
+
+  // ---- Save changes
+  async save() {
+    const L = this.c.Characters_ListBox;
+    if (L.index < 0 || !Game.save) return;
+    const c = this.c, v = n => c[n].value, o = 2 + L.index * 32;
+    const r = Game.save.slice(o, o + 32);
+    const byte = (b, n, k) => { b[k] = strToIntDef(v(n), b[k]) & 255; };
+    const word = (b, n, k) => { const x = strToIntDef(v(n), 30); b[k] = x & 255; b[k + 1] = x >> 8 & 255; };
+    r[9] = this.text('Gender_ComboBox') === 'Male' ? 0x0B : 0x0C;
+    const cls = 'ABFM'[c.Class_ComboBox.selectedIndex], st = 'GSPD'[c.Status_ComboBox.selectedIndex];
+    if (cls) r[10] = cls.charCodeAt(0);
+    if (st) r[11] = st.charCodeAt(0);
+    byte(r, 'STR_Edit', 12); byte(r, 'DEX_Edit', 13); byte(r, 'INT_Edit', 14);
+    word(r, 'CurrentHP_Edit', 16); word(r, 'MaximumHP_Edit', 18); byte(r, 'MP_Edit', 15); word(r, 'XP_Edit', 20);
+    byte(r, 'Level_Edit', 22); byte(r, 'O17_Edit', 23); byte(r, 'O18_Edit', 24);
+    ED_SLOTS.forEach((n, k) => { const i = ED_EQUIP.indexOf(this.text(n)); r[25 + k] = i < 0 ? 0xFF : i; });
+    await Game.writeSave(o, r);
+    const b = Game.save.slice(0x202, 0x21A);
+    word(b, 'Food_Edit', 0); word(b, 'Gold_Edit', 2);
+    byte(b, 'Keys_Edit', 4); byte(b, 'Gems_Edit', 5); byte(b, 'Torches_Edit', 6); byte(b, 'SkullKeys_Edit', 9);
+    for (const [off, n] of ED_QUEST) {
+      const on = c[n + '_CheckBox'].checked;
+      if (off !== 0x20A) { b[off - 0x202] = on ? 0xFF : 0; continue; }
+      b[8] = on ? 1 : 0;   // carpets: one, or the count the party has when more
+      if (b[8] && b[8] < Game.save[0x20A]) b[8] = Game.save[0x20A];
+    }
+    await Game.writeSave(0x202, b);
+    const karma = strToIntDef(v('Karma_Edit'), Game.save[0x2E2]) & 255;
+    if (karma !== Game.save[0x2E2]) await Game.writeSave(0x2E2, [karma]);
+    for (const [first, len] of [[0x21A, 112], [0x2AA, 8]]) {
+      const blk = Game.save.slice(first, first + len);
+      for (const line of c.Items_ListBox.items) {
+        const p = this.parse(line);
+        if (p.off >= first && p.off < first + len) blk[p.off - first] = p.n & 255;
+      }
+      await Game.writeSave(first, blk);
+    }
   },
 };
 
@@ -1970,11 +2605,10 @@ const Quickfight = {
   // the original allows it in a real fight only
   possible() { return !!Game.save && Game.loc === 0xFF && !Game.combat().over; },
   toggle() { if (this.on) this.stop(); else if (this.possible()) this.start(); },
-  start() { this.on = true; $('#qf').classList.remove('hidden'); log('Quickfight on'); Render.draw(); },
-  stop(silent) {
+  start() { this.on = true; $('#qf').classList.remove('hidden'); Render.draw(); },
+  stop() {
     if (!this.on) return;
     this.on = false; $('#qf').classList.add('hidden');
-    if (!silent) log('Quickfight off');
     Render.draw();
   },
   // a weapon's range from DATA.OVL (1684 + item - 10), 0 for anything else
@@ -1989,12 +2623,15 @@ const Quickfight = {
     if (cb.hostiles === 0 && Game.save[0x2F2] === 0)
       job = this.reequipAll().then(() => { log(''); log('No hostile creatures found! Stopped quickfight.'); this.stop(true); });
     else {
-      const me = cb.units[cb.active];
-      if (!me || !me.friendly) return;
-      job = this.act(cb, me);
+      // whose turn it is (a friendly combatant): the original takes its place from the save's
+      // unit table and its name from whoever stands there
+      const unit = cb.units[cb.active], u = Game.unit(cb.active);
+      if (!unit || !unit.friendly) return;
+      const c = inMap(u.x, u.y) ? cb.cells[u.y * 11 + u.x] : null;
+      job = this.act(cb, { ...unit, x: u.x, y: u.y, name: c ? c.name : '' });
     }
     this.busy = true;
-    job.catch(e => log('Quickfight: ' + e.message)).finally(() => { this.busy = false; });
+    job.catch(e => console.warn('Quickfight:', e)).finally(() => { this.busy = false; });
   },
   async act(cb, me) {
     const b = await Api.read(BIOS_HEAD, 4);
@@ -2210,6 +2847,7 @@ const Quickfight = {
 async function teleport(c) {
   if (!Settings.v.debug || !Game.save) return;
   const s = Game.save, area = Game.area(), x = c.x, y = c.y;
+  if (x < 0 || y < 0) return;   // the original compares unsigned: -1 is out of every range
   if (area === 'world' || area === 'under') {
     if (x > 255 || y > 255) return;
     await Game.writeSave(0x2F0, [x, y]);
@@ -2233,7 +2871,6 @@ async function teleport(c) {
     await Game.writeSave(0x6B4 + idx * 8 + 2, [x, y]);
     await Api.write(Game.base + COMBAT_UNITS + idx * 8 + 6, Uint8Array.of(x, y));
   }
-  log(`Teleported to ${pad3(x)},${pad3(y)}`);
 }
 
 // the original's: the hour (2D9 and its copy at 2DA) one on, round the clock
@@ -2242,7 +2879,6 @@ async function forwardTime() {
   let h = Game.save[0x2D9] + 1;
   if (h > 23) h = 0;
   await Game.writeSave(0x2D9, [h, h]);
-  log(`Time is now ${pad2(h)}:${pad2(Game.save[0x2DB])}`);
 }
 
 // what the original does: 1 at 2FD, which lets Esc at the combat prompt escape (dungeon
@@ -2252,36 +2888,35 @@ async function exitCombat() {
   await Game.writeSave(0x2FD, [1]);
   await sleep(500);
   await pushKey(...KEYS.esc);
-  log('Exit combat');
 }
-// during a conversation the game has the NPC's script at DS:B22E; like the
-// original, find that script in the TLK files and dump it to the log
+// the original's Dump TLK during talk: the log shown; the game's talk buffer (1000 bytes at
+// DS:B22E) up to its first C0 made a TLK file of one entry, its listing without the first two
+// and the last four lines the log's text (none: two lines logged)
 const TALK_BUFFER = 0xB22E;
 async function dumpTlk() {
-  if (!Game.save) return;
-  const mem = await Api.read(Game.base + TALK_BUFFER, 1000);
-  const hit = tlkEntries().find(e => {
-    const n = Math.min(e.bytes.length, 64);
-    for (let i = 0; i < n; i++) if (e.bytes[i] !== mem[i]) return false;
-    return n > 8;
-  });
-  if (!hit) { log('Could not find a proper TLK-entry!'); return; }
+  if (!Game.base) return;
   LogWin.open();
-  log(decodeTlk(hit.bytes).join('\n'), true);
+  let mem;
+  try { mem = await Api.read(Game.base + TALK_BUFFER, 1000); } catch { return; }
+  const end = mem.indexOf(0xC0);
+  if (end < 0) { log(''); log('Could not find a proper TLK-entry!'); return; }
+  const file = new Uint8Array(end + 7);
+  file.set([1, 0, 1, 0, 6, 0]);
+  file.set(mem.subarray(0, end + 1), 6);
+  const lines = tlkListing(file).slice(2);
+  LogWin.set(lines.slice(0, Math.max(0, lines.length - 4)));
 }
 
+// the original's: the 64 KB of the game's data segment as Memory_Dump.UM5 (it writes the file
+// into its folder and opens that)
 async function dumpMemory() {
-  const size = await Api.memSize();
-  const parts = [];
-  for (let a = 0; a < size; a += 1 << 20) parts.push(await Api.read(a, Math.min(1 << 20, size - a)));
-  download(new Blob(parts), 'u5_memory.bin');
-  log(`Memory dumped (${size} bytes)`);
+  if (!Game.base) return;
+  download(new Blob([await Api.read(Game.base, 0x10000)]), 'Memory_Dump.UM5');
 }
 
 function toggleDebug() {
   Settings.v.debug = !Settings.v.debug; Settings.save();
   $('#dbg').classList.toggle('hidden', !Settings.v.debug);
-  log('Debug mode ' + (Settings.v.debug ? 'on' : 'off'));
   Render.dirty = true; Render.draw();
 }
 
@@ -2293,13 +2928,14 @@ function pickFolder() {
   const inp = $('#folderInput');
   inp.value = '';
   inp.onchange = async () => {
-    try { await Files.importList(inp.files); log('Game files imported'); Render.draw(); }
+    try { await Files.importList(inp.files); Render.draw(); }
     catch (e) { alert(e.message); }
   };
   inp.click();
 }
 
 async function openPdf(key) {
+  if (Files.pdfUrls[key]) { window.open(Files.pdfUrls[key], '_blank'); return; }
   const f = await DB.get('files', 'PDF:' + key);
   if (!f) { alert(`${MANUALS[key]} wasn't in the game folder when it was chosen.`); return; }
   window.open(URL.createObjectURL(new Blob([f], { type: 'application/pdf' })), '_blank');
@@ -2311,14 +2947,36 @@ function download(blob, name) {
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
 
+// the original's Save map as bitmap: the map as shown, a bitmap named (its save dialog's
+// suggestion) World.bmp, Underworld.bmp, <location>_z<level>.bmp (a basement -1),
+// Combat.bmp, else Map.bmp
 function saveMapImage() {
-  Render.canvas.toBlob(b => download(b, ($('#title').textContent.split(' - ')[0] || 'map').replace(/[^\w ]+/g, '') + '.png'));
+  if (!Game.save) return;
+  const loc = Game.loc, z = Game.save[0x2EF];
+  const name = loc === 0 && z === 0 ? 'World.bmp' : loc === 0 && z === 0xFF ? 'Underworld.bmp'
+    : loc >= 1 && loc <= 40 ? `${LOC_NAMES[loc]}_z${z > 127 ? z - 256 : z}.bmp` : loc === 0xFF ? 'Combat.bmp' : 'Map.bmp';
+  download(new Blob([bmpOf(Render.canvas)]), name);
+}
+// a canvas as a 24-bit Windows bitmap (rows bottom up, 4-byte aligned)
+function bmpOf(c) {
+  const w = c.width, h = c.height, d = c.getContext('2d').getImageData(0, 0, w, h).data;
+  const row = (w * 3 + 3) & ~3, b = new Uint8Array(54 + row * h), v = new DataView(b.buffer);
+  v.setUint16(0, 0x4D42, true); v.setUint32(2, b.length, true); v.setUint32(10, 54, true);
+  v.setUint32(14, 40, true); v.setInt32(18, w, true); v.setInt32(22, h, true); v.setUint16(26, 1, true);
+  v.setUint16(28, 24, true); v.setUint32(34, row * h, true);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const s = ((h - 1 - y) * w + x) * 4, o = 54 + y * row + x * 3;
+    b[o] = d[s + 2]; b[o + 1] = d[s + 1]; b[o + 2] = d[s];
+  }
+  return b;
 }
 
-// backs up the saved game files: a zip download of the game folder's save files
+// the original's Backup saved game: when the game folder has SAVED.GAM, a description asked
+// for; BRIT.OOL, SAVED.GAM, SAVED.OOL and UNDER.OOL (those there) and Explored.UM5 (the
+// page's explored maps, in its format) as a zip download (the original copies them into a
+// folder of Save backups\). A folder chosen in the browser (no webserver's) is chosen again.
 async function backupSaves() {
-  let files = Files.saveSnapshot;
-  if (!files) {
+  if (!Files.base && !Files.saveSnapshot) {
     alert('Choose the game folder again: the backup takes the saved game from there.');
     const inp = $('#folderInput');
     inp.value = '';
@@ -2331,15 +2989,17 @@ async function backupSaves() {
     inp.click();
     return;
   }
+  if (!(await Files.readNow('SAVED.GAM'))) return;
   const desc = prompt('Backup save game\nEnter a description for the save game', '');
   if (desc === null) return;
   const entries = [];
-  for (const n of SAVE_FILES) if (files[n]) entries.push([n, new Uint8Array(await files[n].arrayBuffer())]);
+  for (const n of SAVE_FILES) { const b = await Files.readNow(n); if (b) entries.push([n, b]); }
   entries.push(['Explored.UM5', await Explored.file()]);   // the explored maps in the original's format
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-  download(zipStore(entries), `U5 save ${stamp}${desc ? ' ' + desc.replace(/[\\/:*?"<>|]/g, '') : ''}.zip`);
+  // named as the original's folder under Save backups\: "yyyy-mm-dd - hh.nn - " and the
+  // description without <>:"/\|?*{}%=' and double spaces, trimmed
+  const t = new Date(), clean = desc.replace(/[<>:"/\\|?*{}%=']/g, '').replace(/ {2,}/g, ' ').trim();
+  download(zipStore(entries), `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())} - ${pad2(t.getHours())}.${pad2(t.getMinutes())} - ${clean}.zip`);
   Files.saveSnapshot = null;
-  log('Saved game backed up');
 }
 
 // a minimal "stored" (uncompressed) zip writer
@@ -2370,23 +3030,32 @@ function zipStore(entries) {
 
 /* -------------------------------------------------------- log, help */
 
-const logLines = [];
-function log(text, raw) {
-  const t = new Date().toTimeString().slice(0, 8);
-  logLines.push(raw ? text : `${t}  ${text}`);
-  if (logLines.length > 500) logLines.shift();
-  const l = document.querySelector('#log');
-  if (l) { l.textContent = logLines.join('\n'); l.parentElement.scrollTop = 1e9; }
+/* The original's log (its Log_Form, Debug log): written only with its debug_log setting on
+ * (Data\Settings.txt; here the window's checkbox), a line "hh:nn:ss:  text" put first (an
+ * empty one for none), 51 lines at most. */
+let logLines = [];
+function log(text) {
+  if (!Settings.v.debugLog) return;
+  while (logLines.length > 50) logLines.pop();
+  logLines.unshift(text ? `${new Date().toTimeString().slice(0, 8)}:  ${text}` : '');
+  LogWin.show();
 }
 const LogWin = {
   open() {
-    const d = Dlg.make('logwin', 'Debug log', 620);
+    const d = Dlg.make('logwin', 'Log', 752);
     const body = d.querySelector('.body');
-    body.style.height = '320px';
-    if (!body.querySelector('#log')) body.append(el('div', { id: 'log' }));
-    $('#log').textContent = logLines.join('\n');
-    body.scrollTop = 1e9;
+    if (!body.querySelector('#log')) {
+      Object.assign(body.style, { padding: '0', height: '312px', background: '#000' });
+      const cb = el('input', { type: 'checkbox', checked: !!Settings.v.debugLog,
+        onchange: () => { Settings.v.debugLog = cb.checked; Settings.save(); } });
+      d.querySelector('header .t').after(el('label', { className: 'muted', title: "The original's debug_log setting" }, cb, ' log'));
+      body.append(el('div', { id: 'log' }));
+    }
+    this.show();
   },
+  show() { const l = document.querySelector('#log'); if (l) l.textContent = logLines.join('\n'); },
+  // the TLK dump: the log's text replaced
+  set(lines) { logLines = lines.slice(); this.show(); },
 };
 const Help = {
   open() {

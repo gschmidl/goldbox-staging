@@ -261,3 +261,30 @@ shell's last choice - or the "FRUA design..." setting):
   design folder's SAVE\ (SAVGAM<L>.CSV, VAULT<L>.DAT).
 - checked against a mock of the API (scratchpad mockfrua.py: the HEIRS design,
   its maps 10 and 5 placed in memory), not against the game.
+
+## Found by the fidelity tests (tests/fidelity, 2026-10-07)
+
+- AUTO ID: the item pass (A3A30) identifies every unidentified item whenever
+  it runs with AUTO ID on, out of combat. It runs when AUTO ID is switched on,
+  on the timer when a member's item count (field 0x93) differs from the last
+  party read (A1AE0 sets the flag), and every 2 s with AUTO-AMMO on unless the
+  level up window is open. The AUTO-AMMO switch only flips and saves.
+- File names (AD5B0): <>:"/\|?*{} removed, double spaces made single, Trim.
+  SAVE MAP: "<game> - <area>.png" through it.
+- BACKUP SAVE (ADA44): the newest SAVGAM*.* (FileAge) gives the slot; its
+  SAVGAM<L>*, CHRDAT<L>*, VAULT<L>* (and VAULT.DAT / VAULT.<L> where the game
+  has them) are copied to SAVE STORAGE\yyyy-mm-dd hh-nn - <description>\; the
+  description (asked with "Backup save slot <L>") starts as the location name
+  and goes through AD5B0; afterwards "Latest save slot <L> backupped to folder:
+  <path>". No saved game: nothing.
+- Location name (80A84): on a world map Pools of Darkness's worlds by GEO
+  (11h craters, 19h Realms, 33h Moander, 50h Web), the Buck Rogers games'
+  "World map / Spaceport", else "World map / Menu-town"; in an area its name,
+  else geo<GEO>_<area>.
+- RESTORE RACES (ACC78) writes back the race each slot's character had in
+  the saved game when GBC found the game (block+20h, filled by A8FA8). In FRUA
+  it is never filled: every race becomes 0.
+- Editor combos are set with ItemIndex := value (CB_SETCURSEL): a value past
+  the list leaves the previous choice selected (and Apply writes it).
+- FRUA's explored maps: Games\10. Unlimited Adventures\<design>_Explored.dat
+  (GBC ships one for HEIRS.DSN).

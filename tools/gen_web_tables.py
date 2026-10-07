@@ -23,7 +23,14 @@ files and writes them into the pages, between their /*@NAME@*/ and
                                    preferences, the HUD's item names and the
                                    colours of its bars
 
-usage: gen_web_tables.py [--check] [--gbc FOLDER] [--ultimapper EXE [--magic JSON]]
+  every page            GDI_FONTS  GDI's ascents, descents and character widths of
+                                   the fonts the original draws text in (--fonts:
+                                   measured with the fonts of the Windows it runs on)
+                        GDI_ELLIPSES the circles GDI's Ellipse draws (--fonts too)
+                        GDI_TRIANGLES GBC's party triangle with a 2-pixel pen (--fonts too)
+                        WIN_SORT   Windows' sort weights of the ASCII characters (--fonts too)
+
+usage: gen_web_tables.py [--check] [--gbc FOLDER] [--ultimapper EXE [--magic JSON]] [--fonts]
 
 --gbc is Gold Box Companion 2.65's folder, with Game.dat patched by patch.py
 (the 1st IDs of five games are cut there). --check only reports the tables
@@ -246,6 +253,198 @@ def u5_tables(exe_path):
     return '\n'.join(out)
 
 
+# the fonts each page draws text in, as the original tools' canvases (GDI) do, and the
+# pixel heights measured (GBC's map scales its text with its window)
+FONT_PAGES = {'ultimapper5.html': (['Verdana', 'Tahoma'], range(5, 41)),
+              'ase.html': (['Tahoma', 'Arial Narrow', 'Consolas'], range(5, 41)),
+              'gbc.html': (['Verdana', 'Consolas', 'Arial Narrow'], range(5, 65))}
+# the round things a page draws as the original's GDI does: ASE's glyphs are circles six
+# pixels smaller than the cell (cells of 8 to 76 pixels)
+ELLIPSE_PAGES = {'ase.html': range(2, 71)}
+# GBC's party triangle on map cells of 32 pixels and up (its pen is 2 pixels wide there;
+# the pages draw the 1-pixel one themselves)
+TRIANGLE_PAGES = {'gbc.html': range(32, 97)}
+# the pages that sort text as the original's string lists do (AnsiCompareText)
+SORT_PAGES = ['gbc.html']
+
+
+def win_sort():
+    """WIN_SORT: Windows' primary sort weights (LCMapString's sort key up to its first level
+    separator, case ignored) of the characters 32-126, as Delphi's AnsiCompareText (word
+    sort) compares them; [] for the ones it passes over there (the hyphen, the apostrophe),
+    which only count when all else is equal."""
+    import ctypes
+    kernel32 = ctypes.WinDLL('kernel32')
+    out = []
+    for c in range(32, 127):
+        key = ctypes.create_string_buffer(64)
+        n = kernel32.LCMapStringA(0x0400, 0x00000400 | 0x00000001, bytes([c]), 1, key, 64)   # SORTKEY | IGNORECASE
+        raw = key.raw[:n]
+        out.append(list(raw[:raw.index(1)] if 1 in raw else raw.rstrip(b'\0')))
+    return 'const WIN_SORT = ' + json.dumps(out, separators=(',', ':')) + ';'
+
+
+def gdi_triangles(sizes):
+    """GDI_TRIANGLES: the party triangle GBC draws with Polygon (a 2-pixel pen, a brush) in a
+    map cell of cs pixels, facing north, east, south and west; cs -> four strings, each
+    the first row and then four characters a row (where the pen starts, where the brush
+    starts, where the pen starts again, where the row ends), all chr(48 + n) from
+    cs / 5 - 2. GDI's wide lines follow no simple rule, so they are measured."""
+    import ctypes
+    from ctypes import wintypes
+    gdi32 = ctypes.WinDLL('gdi32')
+    gdi32.CreateCompatibleDC.restype = wintypes.HDC
+    gdi32.CreateDIBSection.restype = wintypes.HBITMAP
+    gdi32.CreateDIBSection.argtypes = [wintypes.HDC, ctypes.c_void_p, ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p),
+                                       wintypes.HANDLE, wintypes.DWORD]
+    gdi32.SelectObject.restype = wintypes.HGDIOBJ
+    gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
+    gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+    gdi32.DeleteDC.argtypes = [wintypes.HDC]
+    gdi32.CreatePen.restype = wintypes.HPEN
+    gdi32.CreateSolidBrush.restype = wintypes.HBRUSH
+    gdi32.Polygon.argtypes = [wintypes.HDC, ctypes.c_void_p, ctypes.c_int]
+    pad, out = 4, {}
+    for cs in sizes:
+        a5, h2, base = cs // 5, cs >> 1, cs // 5 - 2
+        shapes = []
+        for pts in ([(a5, cs - a5), (h2, a5), (cs - a5, cs - a5)], [(a5, a5), (cs - a5, h2), (a5, cs - a5)],
+                    [(a5, a5), (h2, cs - a5), (cs - a5, a5)], [(cs - a5, a5), (a5, h2), (cs - a5, cs - a5)]):
+            n = cs + 2 * pad
+            dc = gdi32.CreateCompatibleDC(None)
+            bits = ctypes.c_void_p()
+            bm = gdi32.CreateDIBSection(dc, struct.pack('<IiiHHIIiiII', 40, n, -n, 1, 32, 0, 0, 0, 0, 0, 0), 0,
+                                        ctypes.byref(bits), None, 0)
+            old = gdi32.SelectObject(dc, bm)
+            px = (ctypes.c_uint32 * (n * n)).from_address(bits.value)
+            for i in range(n * n):
+                px[i] = 0xFFFFFF
+            pen, brush = gdi32.CreatePen(0, 2, 0x000000), gdi32.CreateSolidBrush(0x00FF00)
+            op, ob = gdi32.SelectObject(dc, pen), gdi32.SelectObject(dc, brush)
+            gdi32.Polygon(dc, (ctypes.c_int * 6)(*[v + pad for p in pts for v in p]), 3)
+            rows = []
+            for y in range(n):
+                kinds = ''.join('#' if px[y * n + x] == 0 else 'o' if px[y * n + x] == 0x00FF00 else '.' for x in range(n))
+                if kinds.strip('.'):
+                    m = re.fullmatch(r'(\.*)(#+)(o*)(#*)(\.*)', kinds)
+                    if not m:
+                        sys.exit(f'GDI triangle {cs}, row {y - pad}: {kinds}')
+                    a = len(m.group(1))
+                    b = a + len(m.group(2))
+                    c = b + len(m.group(3))
+                    rows.append((y - pad, [v - pad for v in (a, b, c, c + len(m.group(4)))]))
+            gdi32.SelectObject(dc, op), gdi32.SelectObject(dc, ob), gdi32.SelectObject(dc, old)
+            for h in (pen, brush, bm):
+                gdi32.DeleteObject(h)
+            gdi32.DeleteDC(dc)
+            if any(y != rows[0][0] + k for k, (y, _) in enumerate(rows)):
+                sys.exit(f'GDI triangle {cs}: rows not together')
+            vals = [rows[0][0]] + [v for _, r in rows for v in r]
+            if min(vals) < base or max(vals) - base > 78:
+                sys.exit(f'GDI triangle {cs}: out of the encoding')
+            shapes.append(''.join(chr(48 + v - base) for v in vals))
+        out[cs] = shapes
+    return 'const GDI_TRIANGLES = {\n' + ',\n'.join(f'  {cs}: {json.dumps(s)}' for cs, s in out.items()) + '\n};'
+
+
+def gdi_ellipses(sizes):
+    """GDI_ELLIPSES: the circles GDI's Ellipse draws (a 1-pixel pen, a brush) in a square of
+    d pixels; d -> four characters a row (chr(48 + n)): where the pen starts, where the
+    brush starts, where the pen starts again, where the row ends. Windows draws them through
+    Bezier curves, a little lopsided, so they are measured rather than computed."""
+    import ctypes
+    from ctypes import wintypes
+    gdi32 = ctypes.WinDLL('gdi32')
+    gdi32.CreateCompatibleDC.restype = wintypes.HDC
+    gdi32.CreateDIBSection.restype = wintypes.HBITMAP
+    gdi32.CreateDIBSection.argtypes = [wintypes.HDC, ctypes.c_void_p, ctypes.c_uint, ctypes.POINTER(ctypes.c_void_p),
+                                       wintypes.HANDLE, wintypes.DWORD]
+    gdi32.SelectObject.restype = wintypes.HGDIOBJ
+    gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
+    gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+    gdi32.DeleteDC.argtypes = [wintypes.HDC]
+    gdi32.CreatePen.restype = wintypes.HPEN
+    gdi32.CreateSolidBrush.restype = wintypes.HBRUSH
+    gdi32.Ellipse.argtypes = [wintypes.HDC] + [ctypes.c_int] * 4
+    out = {}
+    for d in sizes:
+        n = d + 2
+        dc = gdi32.CreateCompatibleDC(None)
+        bits = ctypes.c_void_p()
+        bm = gdi32.CreateDIBSection(dc, struct.pack('<IiiHHIIiiII', 40, n, -n, 1, 32, 0, 0, 0, 0, 0, 0), 0,
+                                    ctypes.byref(bits), None, 0)
+        old = gdi32.SelectObject(dc, bm)
+        px = (ctypes.c_uint32 * (n * n)).from_address(bits.value)
+        for i in range(n * n):
+            px[i] = 0xFFFFFF
+        pen, brush = gdi32.CreatePen(0, 1, 0x000000), gdi32.CreateSolidBrush(0x00FF00)
+        op, ob = gdi32.SelectObject(dc, pen), gdi32.SelectObject(dc, brush)
+        gdi32.Ellipse(dc, 1, 1, 1 + d, 1 + d)
+        rows = []
+        for y in range(1, 1 + d):
+            kinds = ''.join('#' if px[y * n + x] == 0 else 'o' if px[y * n + x] == 0x00FF00 else '.'
+                            for x in range(1, 1 + d))
+            m = re.fullmatch(r'(\.*)(#+)(o*)(#*)(\.*)', kinds)
+            if not m:
+                sys.exit(f'GDI ellipse {d}, row {y - 1}: {kinds}')
+            a = len(m.group(1))
+            b = a + len(m.group(2))
+            c = b + len(m.group(3))
+            rows.append(''.join(chr(48 + v) for v in (a, b, c, c + len(m.group(4)))))
+        gdi32.SelectObject(dc, op), gdi32.SelectObject(dc, ob), gdi32.SelectObject(dc, old)
+        for h in (pen, brush, bm):
+            gdi32.DeleteObject(h)
+        gdi32.DeleteDC(dc)
+        out[d] = ''.join(rows)
+    return 'const GDI_ELLIPSES = {\n' + ',\n'.join(f'  {d}: {json.dumps(s)}' for d, s in out.items()) + '\n};'
+
+
+def gdi_fonts(faces, sizes):
+    """GDI's ascent, descent and character advance widths (32-126) of the fonts at
+    the pixel heights given, from 5 up (lfHeight = -px), measured with this Windows'
+    fonts: the pages place text with them exactly as the originals' TCanvas.TextOut does."""
+    import ctypes
+    from ctypes import wintypes
+    gdi32 = ctypes.WinDLL('gdi32')
+
+    class TEXTMETRICW(ctypes.Structure):
+        _fields_ = [(n, ctypes.c_long) for n in ('tmHeight', 'tmAscent', 'tmDescent', 'tmInternalLeading',
+                                                  'tmExternalLeading', 'tmAveCharWidth', 'tmMaxCharWidth',
+                                                  'tmWeight', 'tmOverhang', 'tmDigitizedAspectX',
+                                                  'tmDigitizedAspectY')] + \
+                   [(n, ctypes.c_wchar) for n in ('tmFirstChar', 'tmLastChar', 'tmDefaultChar', 'tmBreakChar')] + \
+                   [(n, ctypes.c_byte) for n in ('tmItalic', 'tmUnderlined', 'tmStruckOut', 'tmPitchAndFamily',
+                                                 'tmCharSet')]
+
+    gdi32.CreateCompatibleDC.restype = wintypes.HDC
+    gdi32.CreateFontW.restype = wintypes.HFONT
+    gdi32.CreateFontW.argtypes = [ctypes.c_int] * 5 + [wintypes.DWORD] * 8 + [wintypes.LPCWSTR]
+    gdi32.SelectObject.restype = wintypes.HGDIOBJ
+    gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
+    gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+    gdi32.GetTextMetricsW.argtypes = [wintypes.HDC, ctypes.POINTER(TEXTMETRICW)]
+    gdi32.GetCharWidth32W.argtypes = [wintypes.HDC, ctypes.c_uint, ctypes.c_uint, ctypes.POINTER(ctypes.c_int)]
+    dc = gdi32.CreateCompatibleDC(None)
+    out = []
+    for face in faces:
+        a, d, w = [], [], []
+        for px in sizes:
+            f = gdi32.CreateFontW(-px, 0, 0, 0, 400, 0, 0, 0, 0, 0, 0, 0, 0, face)
+            old = gdi32.SelectObject(dc, f)
+            tm = TEXTMETRICW()
+            gdi32.GetTextMetricsW(dc, ctypes.byref(tm))
+            widths = (ctypes.c_int * 95)()
+            gdi32.GetCharWidth32W(dc, 32, 126, widths)
+            gdi32.SelectObject(dc, old)
+            gdi32.DeleteObject(f)
+            a.append(tm.tmAscent)
+            d.append(tm.tmDescent)
+            w.append(''.join(chr(32 + v) for v in widths))
+        out.append(f'  {json.dumps(face)}: {{ a: {json.dumps(a)}, d: {json.dumps(d)},\n    w: [' +
+                   ',\n      '.join(json.dumps(s) for s in w) + '] },')
+    return 'const GDI_FONTS = {\n' + '\n'.join(out) + '\n};'
+
+
 def splice(page, name, table, check):
     text = page.read_text('utf-8')
     m = re.search(r'(/\*@' + name + r'@\*/\n)(.*?)(/\*@/' + name + r'@\*/)', text, re.S)
@@ -264,10 +463,20 @@ def main():
     ap.add_argument('--gbc', type=Path, help="Gold Box Companion 2.65's folder (Game.dat patched by patch.py)")
     ap.add_argument('--ultimapper', help='Ultimapper_5.exe')
     ap.add_argument('--magic', help="Ultima5Redux's MagicDefinitions.json")
+    ap.add_argument('--fonts', action='store_true', help="GDI's font metrics, measured on this Windows")
     ap.add_argument('--check', action='store_true', help='only report the tables that would change')
     a = ap.parse_args()
-    if not a.gbc and not a.ultimapper:
-        ap.error('give --gbc or --ultimapper')
+    if not a.gbc and not a.ultimapper and not a.fonts:
+        ap.error('give --gbc, --ultimapper or --fonts')
+    if a.fonts:
+        for page, (faces, sizes) in FONT_PAGES.items():
+            splice(WEB / page, 'GDI_FONTS', gdi_fonts(faces, sizes), a.check)
+        for page, sizes in ELLIPSE_PAGES.items():
+            splice(WEB / page, 'GDI_ELLIPSES', gdi_ellipses(sizes), a.check)
+        for page, sizes in TRIANGLE_PAGES.items():
+            splice(WEB / page, 'GDI_TRIANGLES', gdi_triangles(sizes), a.check)
+        for page in SORT_PAGES:
+            splice(WEB / page, 'WIN_SORT', win_sort(), a.check)
     if a.gbc:
         for name, make in (('GAME_INFO', game_info), ('FIELDS', fields), ('FIELD_ALIASES', aliases), ('VALUES', values)):
             splice(WEB / 'gbc.html', name, make(a.gbc), a.check)

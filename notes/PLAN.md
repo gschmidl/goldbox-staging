@@ -30,6 +30,11 @@ be its own window. same functionality." Then: "one each, not one total".
 - dbxapi32.dll `trace=1` logs every read/write of the original tools: run the
   original against a game to map each feature to memory.
 - Forms of the originals dumped with re\dfm2txt.py (feature inventory).
+- tests/fidelity (2026-10-07): the originals (sandboxed: build/sandbox/dbxapi32.dll,
+  a fake DOSBox window and API, input by window messages, PrintWindow captures) and
+  the pages (headless Edge) run the same sessions on the same game memory; run.py
+  diffs what both show and write. Every session matches (Ultimapper 39, ASE EOB1 17,
+  EOB2 17, ASE3 15, GBC 27 on each of the 12 games).
 
 ## eXo integration (2026-10-05): exo/patch_exo.py
 

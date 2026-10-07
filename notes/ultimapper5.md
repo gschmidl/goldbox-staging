@@ -199,3 +199,13 @@ area), not against the game.
 - Not copied: the name check against the SAVED.GAM file (no file access), writing
   Explored.UM5 when the game saves (the page saves continuously; the backup zip holds
   Explored.UM5 in the original's layout), the DOSBox-foreground requirement, docking.
+
+## Found by the fidelity tests (tests/fidelity, 2026-10-07)
+
+- The list window's 469A4C (FormShow, the menu's Spells / Inventory, S / I, a click
+  on the HUD's right part): nothing chosen, the idle count reset; a window already
+  placed goes back to its kept place (kept at the first placement and on hiding).
+  R shows it as new (placed again, nothing chosen). The HUD click (left: spells,
+  else inventory) needs the game and an active party, and gives the window the focus.
+- Save map as bitmap saves the composed map bitmap as shown, suggesting World.bmp,
+  Underworld.bmp, <location>_z<level>.bmp (a basement -1), Combat.bmp or Map.bmp.

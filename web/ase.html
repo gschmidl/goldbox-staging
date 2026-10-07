@@ -105,6 +105,284 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const hex = (n, w = 4) => n.toString(16).toUpperCase().padStart(w, '0');
 const pad2 = n => String(n).padStart(2, '0');
 
+/* Drawing the way the originals' (GDI) canvases draw.  Text: TextOut(x, y) has the top
+ * of the character cell at y and the baseline tmAscent below it, each character GDI's
+ * advance width after the one before; TextHeight is tmAscent + tmDescent.  GDI_FONTS
+ * holds those metrics (characters 32-126 as code - 32) at pixel heights 5 to 40,
+ * measured on Windows (tools/gen_web_tables.py --fonts). */
+/*@GDI_FONTS@*/
+const GDI_FONTS = {
+  "Tahoma": { a: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40], d: [1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 8, 8, 8, 8],
+    w: ["\"\"\"$#%#!\"\"#$\"\"\"\"##########\"\"$$$\"%########\"\"#\"$#$#$#####%###\"\"\"$####\"##\"##!!\"!$####\"\"\"#\"$\"\"\"\"\"\"$",
+      "\"\"\"$#&$!\"\"#$\"\"\"\"##########\"\"$$$#%$$$$##$$\"#$#%$$#$$#$$$%###\"\"\"$#######\"##!\"#!%####\"#\"##$####\"#$",
+      "\"\"#%$'%!##$%\"#\"#$$$$$$$$$$\"\"%%%#&$$$%$$%%##$#%%%$%$$$%$&$$$###%$$$$#$$\"$$\"\"#\"&$$$$##\"$#%######%",
+      "###&$(%\"##$&\"#\"#$$$$$$$$$$##&&&$'%%%%$$%%##%$&%&$&%$%%%'%%$###&$$$$$$$#$$\"\"$\"'$$$$#$#$$&$$$$#$&",
+      "#\"$'&*&\"##&'####%%%%%%%%%%##'''$('&''&&''$$&$('(&(&&&''(%&%###'%%%%$%%#%%\"#%\"(%%%%#$#%&($&$$$$'",
+      "#\"$'&*'\"$$&'#$#$%%%%%%%%%%$$'''%)'&''&&''$$&%('(&(&&&'&*&&&$$$'%%%&%&%#&&\"#&\"(&&&&$$#&&(%&$%$%'",
+      "#$$(&+'\"$$&($$$$&&&&&&&&&&$$(((%*'&''&&''$%&%('(&('&&'&*&&&$$$(&&&&%&&$&&\"#%\"(&&&&$%$&&(&&%%$%(",
+      "$$%)',(#%%'($$$%''''''''''$$)))&+(''('&(($%'&)()')''(((,'('%%%)''&'&''$''\"#&\"*''''$%%'&*&&%&%&)",
+      "$$%)',)#%%(($%$%''''''''''%%)))&,('((''(($%'&*()')(((((,(''%%%)''''&''$''#$&#+''''%&$'&*&&&&&&)",
+      "$$&*(.)#%%(*$%$%((((((((((%%***'-(()*('))$&('*)*(*)(()(.(((%%%*(('('('$((\"$'\",((((%&%((*((&'%'*",
+      "%$&+(/*#&&(+%%%&((((((((((%%+++'.)))*((**&&)',*+(+)(**).)*(&&&+(((('((%((\"$'\"-((((%'%((*((''&'+",
+      "%$&,)0+#&&),%&%&))))))))))&&,,,(/+)*+)(++&')(,+,),*)*+*.)*)&&&,))()')(%))$%($.))))&'%)(,(('(&(,",
+      "%&',)1+$''),%&%'))))))))))&&,,,(/+**,*)++&'*(-+,),+)*+*/***''',))))())%))$%($.))))&(&)(-(((('(,",
+      "&&'-*2,$''*-%'%'**********&&---)0+++,*),,'(+).,-*-+*+,+0***'''-**)*(*)&**$%)$/****&(&*)-))()')-",
+      "&&(.*3-$''*.&'&'**********''...)1+++-+*--'(+)/--*-,++,+1+++'''.***+)+*&++$%)$0+*++'(&+).))()').",
+      "&'(/+4-$((+/&'&(++++++++++''///)2,,,.+*-.'(,*/-.+.,+,-,2,,+(((/++++)++&++%&*%1++++')'+*/**)*(*/",
+      "''(/+5.$((+/&(&(++++++++++''///*3---.,+..(),*0./,/-,,.-3,,,(((/+++,*,+',,%&*%2,+,,()',*0**)*(*/",
+      "'')0,5/%((,0'('(,,,,,,,,,,((000*4---/,+//()-+1/0,0.,-.-4--,(((0,,,,*,,',,%&+%2,,,,(*',+0++*+(+0",
+      "'()1-60%))-1'(')----------((111+5...0-,/0)*.+2/0-0.--/.5---)))1--,-+-,'--%&+%3-,--(*(-+1++*+)+1",
+      "((*1-70%))-1')')----------((111+6...0--00)*.,301-1/-.0.6..-)))1----+--(--%',%4----)+(-,2,,+,),1",
+      "((*2.81%**.2()(*..........))222,7///1.-11)*/,312.20./0/7/..***2..-.,.-(..&',&5....)+(.,3,,+,*,2",
+      "()*3.92%**.3()(*..........))333,80/02/.12*+/-412.20./107///***3....,..(./&'-&6/...),)/-3--,-*-3",
+      "()+4/:2&**/4(*(*//////////**444-90002/.22*+0-523/31/020800/***4//./,/.)//&(-&7////*,)/-4--,-*-4",
+      "))+4/;3&++/4(*(+//////////**444-911130/33*,0.634/4100219000+++4////-//)/0&(.&80///*-)0.5..,-+-4",
+      ")*,50<4&++05)+)+0000000000**555.:11140/34+,1.6350520131:110+++500/0-0/)00'(.'80000*-*0.6..-.+.5",
+      ")*,60=4&++06)+)+0000000000++666.;22241044+-2/7451531242;111+++60001.10*11'(/'91011+-*1/6//-.+.6",
+      "**,71>5',,17)+),1111111111++777/<32351055,-2/8561631243<221,,,71101.10*11')/':1111+.*1/7//./,/7",
+      "*+-71?6',,17*,*,1111111111++777/=33362156,-309572742353=322,,,71112/21*22')0';2122,.+20800./,/7",
+      "*+-82@6'--28*,*-2222222222,,8880>43463166,.309672742364>332---82212/21+22()0(<2222,/+20900/0-08",
+      "++.93A7'--39*,*-3333333333,,9990?44473277-.41:783853464?443---93323032+33(*1(=3233,/+31911/0-09",
+      "+,.93B8'--39+-+-3333333333,,9991@55584278-/51;793964475@444---93323032+34(*1(=4333-0,41:1101-19",
+      "+,.:4C8(..4:+-+.4444444444--:::1A65684388-/52<894964585@554...:4434143+44(*2(>4444-0,42;2201.1:",
+      ",,/;4D9(..4;+-+.4444444444--;;;2B66695399./62=9:4:75686A555...;4434143,45(*2(?5444-1,52;2202.2;",
+      ",-/<5E:(//5<,.,/5555555555--<<<2C767:549:.063=9;5;85697B665///<5545254,55)+3)@5555.1-53<3312/2<",
+      ",-0<5F:(//5<,.,/5555555555..<<<2C777:64::/073>:<6<867:7C766///<5546265,66)+3)A6566.1-63=3313/3<",
+      "--0=6G;(//6=,/,/6666666666..===3D888;65;;/184?;<6<967:8D776///=6656265-66)+4)B6666.2-64>4423/3="] },
+  "Arial Narrow": { a: [5, 6, 6, 10, 10, 11, 12, 13, 13, 14, 16, 16, 17, 18, 19, 19, 20, 21, 21, 23, 24, 25, 25, 26, 27, 27, 29, 30, 32, 32, 33, 34, 34, 35, 36, 37], d: [1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 4, 4, 5, 4, 4, 5, 5, 5, 6, 6, 6, 6, 6, 7, 6, 8, 7, 7, 8, 8, 9, 8, 9, 9, 9, 9],
+    w: ["!!!\"\"$#!!!\"\"!!!!\"\"\"\"\"\"\"\"\"\"!!\"\"\"\"$########!\"#\"##########$###!!!\"\"!\"\"\"\"\"!\"\"!!\"!#\"\"\"\"!\"!\"\"#\"\"\"!!!\"",
+      "!!\"##$#!\"\"\"#!\"!!##########!!####%##$$##$$!\"##$$$#$$##$#%###!!!\"#\"##\"##!##!!\"!$####\"\"!#\"$\"\"\"\"!\"#",
+      "\"\"\"$#($!\"\"\"#\"\"\"\"##########\"\"####&$$$$$$$$\"#$#%$$$$$$$$$%$$$\"\"\"##\"#####\"##!!#!%####\"#\"##$###\"!\"#",
+      "\"\"\"$$($!\"\"#$\"\"\"\"$$$$$$$$$$\"\"$$$$'$$%%$$%%\"#$$%%%$%%$$%$&$$$\"\"\"#$\"$$#$$\"$$!!#!%$$$$\"#\"$#%###\"\"\"$",
+      "\"\"#$$(%!\"\"#$\"\"\"\"$$$$$$$$$$\"\"$$$$'%%%%%%&%\"$%$&%&%%%%%%%'%%%\"\"\"#$\"$$$$$\"$$\"\"$\"&$$$$\"$\"$$&%$$\"\"\"$",
+      "\"\"#%%(%\"###%\"#\"\"%%%%%%%%%%\"\"%%%%(%%&&%%&&\"$%%&&&%&&%%&%(%%%\"\"\"$%#%%$%%\"%%\"\"$\"&%%%%#$\"%$&%$$#\"#%",
+      "###%%(&\"##$%####%%%%%%%%%%##%%%%)&&'&&&'&\"%&%(''&''&&'&(&&&###$%#%%%%%\"%%\"\"%\"(%%%%#%\"%&(&&%#\"#%",
+      "##$&%+'\"##$&####%%%%%%%%%%##&&&%*''(''&((#%'%)(('(''%(')&'%###%%#%%%%%\"%%\"\"%\"(%%%%#%\"%&(&&%###&",
+      "##$'&+'\"$$$&#$##&&&&&&&&&&##&&&&+''((''((#%'&)(('((''(')'''###%&$&&%&&\"&&\"\"%\"(&&&&$%\"&&(&&%$#$&",
+      "##$'&+(\"$$$'#$##&&&&&&&&&&##'''&,(((((')(#&(&+()()(('('+((&###%&$&&&&&\"&&\"\"&\"*&&&&$&\"&&(&&&$#$'",
+      "##$''+(\"$$%'#$##''''''''''##'''','())((*)#&('+)*(*)())'+('(###&'$'''''#''##&#+''''$&#'%)&%%$#$'",
+      "$#%(',)#$$%($$$$''''''''''$$((('-)))))(*)#')'+)*)*))')),()'$$$&'$'('((#('##'#+'((($'#'')'''$#$(",
+      "$$%((,)#%%%($%$$(((((((((($$((((.))**))+*#')(-*+)+*))*)-)))$$$'(%(('((#((##'#-((((%'#(')'''%$%(",
+      "$$%((,*#%%&)$%$$(((((((((($$)))(/**++*)++#'*(-++*++*)+)-)))$$$'(%(('((#((##'#-((((%'#('+'''%$%)",
+      "$$&(),*#%%&)$%$$))))))))))$$))))0**++**,+#(*)-+,*,+*)++/*)*$$$')%))())#))##(#-))))%(#)'+('(%$%)",
+      "%%&))/+#%%&*%%%%))))))))))%%***)1++,,+*-,%(+)/,-+-,+*,+/++*%%%()%))())%))##(#/))))%(%))-()(%$%*",
+      "%%&+*3+#&&'*%&%%**********%%****1++,,++-,$)+*/,-+-,++,+0+,+%%%(*&**)**%**$$)$.****&)%*)-())&$&*",
+      "%%&,*3,#&&'+%&%%**********%%+++*2+,--,+.-$),*/-.,.-,+--1,,+%%%(*&**)**%**$$)$/****&)%*)-)))&%&+",
+      "%%',*3-$&&'+%&%%**********%%+++*3--..-,/.$),*1./-/.-,.-2--,%%%)*&**)**%**$$)$0****&)%*).)))&%&+",
+      "%%',+3-$''(,%'%%++++++++++%%,,,+4--..-,/.$*-+1./-/.-,.-3--,%%%)+'++*++&++$$*$0++++'*%+)/*)*'%',",
+      "&&',+3.$''(,&'&&++++++++++&&,,,+5-.//.-0/&*.+1/0.0/-,/-3..-&&&*+'++*++&++$%*$0++++'*&+)/*)*'%',",
+      "&&(,,3.$''(,&'&&,,,,,,,,,,&&,,,,6..//.-1/%+.,2/1.1/.-/-4..-&&&*,',,+,,&,,%%+%2,,,,'+&,+/+++'&',",
+      "&&(,,4/$'')-&'&&,,,,,,,,,,&&---,6//00/.10&+/,201/10/.0/5//.&&&*,',,+,,&,,%%+%2,,,,'+&,+0+++'&'-",
+      "&&(.-7/$(()-&(&&----------&&----7//11/.21&+/-312/21/.1/5/..&&&+-(,-+--&,-$$*$4----(+&-+1+++(&(-",
+      "''(.-70%(().'(''----------''...-800110/31&,0-4130310/10600/'''+-(--,.-'.-%%,$4---.(,'-+1,+,(&(.",
+      "'')..70%((*.'(''..........''....900220/32',0.4230320/20700/''',.(..,..'..%%,%4....(,'.,2,,,(&(.",
+      "'')..71%((*/'(''..........''///.:11221042'-1.52414210218110''',.(..-..'..&&-&5....(-'.-2---('(/",
+      "'')./72%))*/')''//////////''////;22332043'-2/63424320329220''',/)//-//'//&&-&6////)-'/-3---)')/",
+      "((*./72%))+0()((//////////((000/;22442154(.2/7452542142:221(((-/)//.//(//&&.&7////).(/.4...)')0",
+      "((*.073%))+0()((0000000000((0000<33443164(.307463643143:331(((-0)00.00(00&&.&70000).(0.4...)')0",
+      "((*20;3&**+1(*((0000000000((1110=33553265(.308563653253;332(((-0*00.00(00&&.&80000*.(0.5...*'*1",
+      "((*30>4&**+1(*((0000000000((1110>44554275(/409574754254<442(((.0*00/00(00''/'90000*/(0/5///*(*1",
+      "((+31>4&**,2(*((1111111111((2221?44664386(/419684864364=443(((.1*11/11(11''/'91111*/(1/6///*(*2",
+      "))+41?5&**,2)*))1111111111))2221@55665386)051:685865365=553)))/1*11011)01''0':1111*0)106000*(*2",
+      "))+42?5&++,3)+))2222222222))3332@55775497)052;795975475>554)))/2+22022)22''0';2222+0)207000+(+3",
+      ")),42?6&++-3)+))2222222222))3332A668864:8)062;8:6:86486?664)))/2+22022)22''0';2222+0)208000+)+3"] },
+  "Consolas": { a: [5, 6, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 29, 30, 31, 32, 33, 34, 35, 36, 37], d: [1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 8, 9, 9, 9, 9, 10, 10, 10],
+    w: ["###############################################################################################",
+      "###############################################################################################",
+      "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$",
+      "$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$",
+      "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%",
+      "%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%",
+      "&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&",
+      "'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''",
+      "'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''",
+      "(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((",
+      "(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((",
+      ")))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))",
+      ")))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))",
+      "***********************************************************************************************",
+      "***********************************************************************************************",
+      "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++",
+      ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",
+      ",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",
+      "-----------------------------------------------------------------------------------------------",
+      "-----------------------------------------------------------------------------------------------",
+      "...............................................................................................",
+      "...............................................................................................",
+      "///////////////////////////////////////////////////////////////////////////////////////////////",
+      "///////////////////////////////////////////////////////////////////////////////////////////////",
+      "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
+      "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+      "22222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222",
+      "33333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+      "33333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333",
+      "44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444",
+      "44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444",
+      "55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555",
+      "55555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555555",
+      "66666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666666"] },
+};
+/*@/GDI_FONTS@*/
+/*@GDI_ELLIPSES@*/
+const GDI_ELLIPSES = {
+  2: "01110111",
+  3: "122201231222",
+  4: "1333013401341333",
+  5: "14440145014501451444",
+  6: "244412450156015612452444",
+  7: "2555125601670167016712562555",
+  8: "35551357126701780178126713573555",
+  9: "366613681278018901890189127813683666",
+  10: "4666246812891289019:019:1289128924684666",
+  11: "47772479129:129:01:;01:;01:;129:129:24794777",
+  12: "5777257:12:;12:;12:;01;<01;<12:;12:;12:;257:5777",
+  13: "4999349:23:;12;<12;<01<=01<=01<=12;<12;<23:;349:4999",
+  14: "4:::34:;23;<12<=01<=01=>01=>01=>01=>01<=12<=23;<34:;4:::",
+  15: "5:::35:<23<=12=>12=>01>?01>?01>?01>?01>?12=>12=>23<=35:<5:::",
+  16: "5;;;45;<24<>23=>12>?01?@01?@01?@01?@01?@01?@12>?23=>24<>45;<5;;;",
+  17: "6;;;46;=34=>23>?12?@12?@01@A01@A01@A01@A01@A12?@12?@23>?34=>46;=6;;;",
+  18: "7;;;47;>34>?23?@12@A12@A12@A01AB01AB01AB01AB12@A12@A12@A23?@34>?47;>7;;;",
+  19: "7<<<57<>35>@23@A23@A12AB12AB01BC01BC01BC01BC01BC12AB12AB23@A23@A35>@57<>7<<<",
+  20: "8<<<58<?45?@34@A23AB12BC12BC12BC01CD01CD01CD01CD12BC12BC12BC23AB34@A45?@58<?8<<<",
+  21: "8===68=?46?A34AB23BC23BC12CD12CD01DE01DE01DE01DE01DE12CD12CD23BC23BC34AB46?A68=?8===",
+  22: "8>>>68>@46@B34BC23CD23CD12DE12DE01DE01EF01EF01EF01EF01DE12DE12DE23CD23CD34BC46@B69=@9===",
+  23: "9>>>69>A56AB35BD34CD23DE12EF12EF12EF01FG01FG01FG01FG01FG12EF12EF12EF23DE34CD35BD56AB69>A9>>>",
+  24: ":>>>7:>A57AC45CD34DE23EF23EF12FG12FG01GH01GH01GH01GH01GH01GH12FG12FG23EF23EF34DE45CD57AC7:>A:>>>",
+  25: ":???7:?B57BD45DE34EF23FG23FG12GH12GH12GH01HI01HI01HI01HI01HI12GH12GH12GH23FG23FG34EF45DE57BD7:?B:???",
+  26: ";???7;?C67CD46DF34FG34FG23GH12HI12HI12HI12HI01IJ01IJ01IJ01IJ12HI12HI12HI12HI23GH34FG34FG46DF67CD7;?C;???",
+  27: ";@@@8;@C68CE56EF45FG34GH23HI23HI12IJ12IJ12IJ01JK01JK01JK01JK01JK12IJ12IJ12IJ23HI23HI34GH45FG56EF68CE8;@C;@@@",
+  28: "<@@@8<@D78DE57EG45GH34HI34HI23IJ12JK12JK12JK12JK01KL01KL01KL01KL12JK12JK12JK12JK23IJ34HI34HI45GH57EG78DE8<@D<@@@",
+  29: "<AAA9<AE79EF67FH46HI45IJ34IJ23JK23KL12KL12KL12KL01LM01LM01LM01LM01LM12KL12KL12KL23KL23JK34IJ45IJ46GI67FG79DF9<AD<AAA",
+  30: "<BBB9<BE79EG67GH56HI45IJ34JK23KL23KL12LM12LM12LM01LM01MN01MN01MN01MN01LM12LM12LM12LM23KL23KL34JK45IJ56HI67GH79EG9<BE<BBB",
+  31: "=BBB9=BF89FG68GI56IJ45JK34KL34KL23LM12MN12MN12MN12MN01NO01NO01NO01NO01NO12MN12MN12MN12MN23LM34KL34KL45JK56IJ68GI89FG9=BF=BBB",
+  32: ">BBB:>BF8:FH78HI57IK45KL45KL34LM23MN23MN12NO12NO12NO01OP01OP01OP01OP01OP01OP12NO12NO12NO23MN23MN34LM45KL45KL57IK78HI8:FH:>BF>BBB",
+  33: ">CCC:>CG8:GI78IJ57JL45LM45LM34MN23NO23NO12OP12OP12OP12OP01PQ01PQ01PQ01PQ01PQ12OP12OP12OP12OP23NO23NO34MN45LM45LM57JL78IJ8:GI:>CG>CCC",
+  34: "?CCC:?CH9:HI79IK67KL56LM45MN34NO34NO23OP12PQ12PQ12PQ12PQ12PQ01QR01QR01QR01QR12PQ12PQ12PQ12PQ12PQ23OP34NO34NO45MN56LM67KL79IK9:HI:?CH?CCC",
+  35: "?DDD;?DH9;HJ89JK68KM56MN45NO45NO34OP23PQ23PQ12QR12QR12QR12QR01RS01RS01RS01RS01RS12QR12QR12QR12QR23PQ23PQ34OP45NO45NO56MN68KM89JK9;HJ;?DH?DDD",
+  36: "@DDD;@DI:;IJ8:JL78LM57MO56NO45OP34PQ34PQ23QR12RS12RS12RS12RS12RS01ST01ST01ST01ST12RS12RS12RS12RS12RS23QR34PQ34PQ45OP56NO57MO78LM8:JL:;IJ;@DI@DDD",
+  37: "@EEE;@EJ:;JK8:KM78MN67NO56OP45PQ34QR34QR23RS12ST12ST12ST12ST12ST01TU01TU01TU01TU01TU12ST12ST12ST12ST12ST23RS34QR34QR45PQ56OP67NO78MN8:KM:;JK;@EJ@EEE",
+  38: "@FFF<@FJ:<JL9:LM79MO67OP56PQ45QR45QR34RS23ST23ST12TU12TU12TU12TU01TU01UV01UV01UV01UV01TU12TU12TU12TU12TU23ST23ST34RS45QR45QR56PQ67OP79MO9:LM:<JL<AEJAEEE",
+  39: "AFFF<AFK;<KL9;LN89NO68OQ56QR56QR45RS34ST34ST23TU12UV12UV12UV12UV12UV01VW01VW01VW01VW01VW12UV12UV12UV12UV12UV23TU34ST34ST45RS56QR56QR68OQ89NO9;LN;<KL<AFKAFFF",
+  40: "BFFF=BFK;=KM:;MN8:NP78PQ67QR56RS45ST34TU34TU23UV12VW12VW12VW12VW12VW01WX01WX01WX01WX01WX01WX12VW12VW12VW12VW12VW23UV34TU34TU45ST56RS56RS68PR89OP9;MO;=KM=BFKBFFF",
+  41: "BGGG=BGL;=LN:;NO8:OQ78QR67RS56ST45TU45TU34UV23VW23VW12WX12WX12WX12WX12WX01XY01XY01XY01XY01XY12WX12WX12WX12WX12WX23VW23VW34UV45TU45TU56ST67RS78QR8:OQ:;NO;=LN=BGLBGGG",
+  42: "CGGG>CGL<>LN:<NP9:PQ79QS67ST56TU56TU45UV34VW34VW23WX23WX12XY12XY12XY12XY12XY01YZ01YZ01YZ01YZ12XY12XY12XY12XY12XY23WX23WX34VW34VW45UV56TU56TU67ST79QS9:PQ:<NP<>LN>CGLCGGG",
+  43: "CHHH>CHM<>MO;<OP9;PR89RS68SU67TU56UV45VW45VW34WX23XY23XY12YZ12YZ12YZ12YZ12YZ01Z[01Z[01Z[01Z[01Z[12YZ12YZ12YZ12YZ12YZ23XY23XY34WX45VW45VW56UV67TU68SU89RS9;PR;<OP<>MO>CHMCHHH",
+  44: "DHHH?DHM<?MP;<PQ9;QS89ST78TU67UV56VW56VW45WX34XY23YZ23YZ23YZ12Z[12Z[12Z[12Z[12Z[01[\\01[\\01[\\01[\\12Z[12Z[12Z[12Z[12Z[23YZ23YZ23YZ34XY45WX56VW56VW67UV78TU89ST9;QS;<PQ<?MP?DHMDHHH",
+  45: "DIII?DIN=?NP;=PR:;RS8:SU78UV67VW56WX56WX45XY34YZ34YZ23Z[23Z[12[\\12[\\12[\\12[\\12[\\01\\]01\\]01\\]01\\]01\\]12[\\12[\\12[\\12[\\12[\\23Z[23Z[34YZ34YZ45XY56WX56WX67VW78UV8:SU:;RS;=PR=?NP?DINDIII",
+  46: "DJJJ?DJO=?OQ<=QR:<RT9:TU79UW67WX67WX56XY45YZ45YZ34Z[23[\\23[\\12[\\12\\]12\\]12\\]12\\]01\\]01]^01]^01]^01]^01\\]12\\]12\\]12\\]12\\]12[\\23[\\23[\\34Z[45YZ45YZ56XY67WX67WX79UW9:TU:<RT<=QR=@NQ@EINEIII",
+  47: "EJJJ@EJO=@OR<=RS;<ST9;TV89VW78WX67XY56YZ56YZ45Z[34[\\34[\\23\\]23\\]12]^12]^12]^12]^12]^01^_01^_01^_01^_01^_12]^12]^12]^12]^12]^23\\]23\\]34[\\34[\\45Z[56YZ56YZ67XY78WX89VW9;TV;<ST<=RS=@OR@EJOEJJJ",
+  48: "FJJJAFJO>AOR<>RT;<TU9;UW89WX78XY67YZ56Z[56Z[45[\\34\\]34\\]23]^23]^23^_12^_12^_12^_12^_12_`01_`01_`01_`01_`12_`12^_12^_12^_12^_23^_23]^23]^34\\]34\\]45[\\56Z[56Z[67YZ78XY89WX9;UW;<TU<>RT>AORAFJOFJJJ",
+  49: "DMMM@DMQ>@QS=>ST;=TV:;VW8:WY78YZ67Z[67Z[56[\\45\\]45\\]34]^23^_23^_12_`12_`12_`12_`01`a01`a01`a01`a01`a01`a01`a01`a01`a12_`12_`12_`12_`23^_23^_34]^45\\]45\\]56[\\67Z[67Z[78YZ8:WY:;VW;=TV=>ST>@QS@DMQDMMM",
+  50: "DNNNADNQ?AQS=?SU<=UV:<VX9:XY79Y[78Z[67[\\56\\]56\\]45]^34^_34^_23_`23_`12`a12`a12`a01ab01ab01ab01ab01ab01ab01ab01ab01ab01ab12`a12`a12`a23_`23_`34^_34^_45]^56\\]56\\]67[\\78Z[79Y[9:XY:<VX<=UV=?SU?AQSADNQDNNN",
+  51: "DOOOADOR?ART>?TU<>UW;<WX9;XZ89Z[78[\\67\\]67\\]56]^45^_45^_34_`23`a23`a12ab12ab12ab01ab01bc01bc01bc01bc01bc01bc01bc01bc01bc01ab12ab12ab12ab23`a23`a34_`34_`45^_56]^67\\]67\\]78[\\89Z[9;XZ;<WX<>UW>?TU?ARTADORDOOO",
+  52: "EOOOBEOR?BRU>?UV<>VX;<XY9;Y[89[\\78\\]67]^67]^56^_45_`45_`34`a23ab23ab23ab12bc12bc12bc01cd01cd01cd01cd01cd01cd01cd01cd01cd01cd12bc12bc12bc23ab23ab23ab34`a45_`45_`56^_67]^67]^78\\]89[\\9;Y[;<XY<>VX>?UV?BRUBEOREOOO",
+  53: "EPPPBEPS@BSU>@UW=>WX;=XZ:;Z[8:[]78]^78]^67^_56_`56_`45`a34ab34ab23bc23bc12cd12cd12cd01de01de01de01de01de01de01de01de01de01de01de12cd12cd12cd23bc23bc34ab34ab45`a56_`56_`67^_78]^78]^8:[]:;Z[;=XZ=>WX>@UW@BSUBEPSEPPP",
+  54: "FPPPCFPS@CSV?@VW=?WY<=YZ:<Z\\9:\\]89]^78^_67_`67_`56`a45ab45ab34bc23cd23cd23cd12de12de12de01ef01ef01ef01ef01ef01ef01ef01ef01ef01ef12de12de12de23cd23cd23cd34bc45ab45ab56`a67_`67_`78^_89]^9:\\]:<Z\\<=YZ=?WY?@VW@CSVCFPSFPPP",
+  55: "GPPPCGPT@CTW?@WX=?XZ<=Z[;<[\\9;\\^89^_78_`67`a67`a56ab45bc45bc34cd23de23de23de12ef12ef12ef12ef01fg01fg01fg01fg01fg01fg01fg01fg01fg12ef12ef12ef12ef23de23de23de34cd45bc45bc56ab67`a67`a78_`89^_9;\\^;<[\\<=Z[=?XZ?@WX@CTWCGPTGPPP",
+  56: "GQQQCGQUACUW?AWY>?YZ<>Z\\;<\\]9;]_89_`78`a78`a67ab56bc56bc45cd34de34de23ef23ef12fg12fg12fg12fg01gh01gh01gh01gh01gh01gh01gh01gh01gh01gh12fg12fg12fg12fg23ef23ef34de34de45cd56bc56bc67ab78`a78`a89_`9;]_;<\\]<>Z\\>?YZ?AWYACUWCGQUGQQQ",
+  57: "GRRRDGRUADUX@AXY>@Y[=>[\\;=\\^:;^_8:_a89`a78ab67bc67bc56cd45de45de34ef23fg23fg23fg12gh12gh12gh01gh01hi01hi01hi01hi01hi01hi01hi01hi01hi01gh12gh12gh12gh23fg23fg23fg34ef45de45de56cd67bc67bc78ab89`a8:_a:;^_;=\\^=>[\\>@Y[@AXYADUXDHQUHQQQ",
+  58: "HRRRDHRVBDVX@BXZ?@Z[=?[]<=]^:<^`9:`a89ab78bc78bc67cd56de56de45ef34fg34fg23gh23gh12hi12hi12hi12hi01ij01ij01ij01ij01ij01ij01ij01ij01ij01ij12hi12hi12hi12hi23gh23gh34fg34fg45ef56de56de67cd78bc78bc89ab9:`a:<^`<=]^=?[]?@Z[@BXZBDVXDHRVHRRR",
+  59: "HSSSEHSVBEVY@BY[?@[\\=?\\^<=^_:<_a9:ab89bc78cd78cd67de56ef56ef45fg34gh34gh23hi23hi23hi12ij12ij12ij01jk01jk01jk01jk01jk01jk01jk01jk01jk01jk01jk12ij12ij12ij23hi23hi23hi34gh34gh45fg56ef56ef67de78cd78cd89bc9:ab:<_a<=^_=?\\^?@[\\@BY[BEVYEHSVHSSS",
+  60: "ISSSEISWBEWZ@BZ\\?@\\]=?]_<=_`;<`a9;ac89cd89cd78de67ef56fg56fg45gh34hi34hi23ij23ij23ij12jk12jk12jk12jk01kl01kl01kl01kl01kl01kl01kl01kl01kl01kl12jk12jk12jk12jk23ij23ij23ij34hi34hi45gh56fg56fg67ef78de89cd89cd9;ac;<`a<=_`=?]_?@\\]@BZ\\BEWZEISWISSS",
+  61: "JSSSFJSWCFWZACZ\\?A\\^=?^`<=`a;<ab:;bc9:cd89de78ef67fg56gh56gh45hi45hi34ij34ij23jk23jk23jk12kl12kl12kl12kl01lm01lm01lm01lm01lm01lm01lm01lm01lm12kl12kl12kl12kl23jk23jk23jk34ij34ij45hi45hi56gh56gh67fg78ef89de9:cd:;bc;<ab<=`a=?^`?A\\^ACZ\\CFWZFJSWJSSS",
+  62: "JTTTFJTXCFX[AC[]?A]_>?_`<>`b;<bc:;cd9:de89ef78fg67gh67gh56hi45ij45ij34jk34jk23kl23kl23kl12lm12lm12lm12lm01mn01mn01mn01mn01mn01mn01mn01mn01mn01mn12lm12lm12lm12lm23kl23kl23kl34jk34jk45ij45ij56hi67gh67gh78fg89ef9:de:;cd;<bc<>`b>?_`?A]_AC[]CFX[FJTXJTTT",
+  63: "JUUUFJUYCFY\\AC\\^@A^_>@_a=>ab<=bc:<ce9:ef89fg89fg78gh67hi56ij56ij45jk34kl34kl23lm23lm23lm12mn12mn12mn12mn01mn01no01no01no01no01no01no01no01no01no01mn12mn12mn12mn12mn23lm23lm23lm34kl34kl45jk56ij56ij67hi78gh89fg89fg9:ef:<ce<=bc=>ab>@_a@A^_AC\\^CFY\\FKTYKTTT",
+  64: "KUUUGKUYDGY\\BD\\^@B^`>@`b=>bc<=cd;<de9;eg9:fg89gh78hi67ij56jk56jk45kl45kl34lm34lm23mn23mn23mn12no12no12no12no01op01op01op01op01op01op01op01op01op01op12no12no12no12no23mn23mn23mn34lm34lm45kl45kl56jk56jk67ij78hi89gh9:fg9;eg;<de<=cd=>bc>@`b@B^`BD\\^DGY\\GKUYKUUU",
+  65: "KVVVGKVZDGZ]BD]_@B_a?@ab=?bd<=de;<ef:;fg9:gh89hi78ij67jk67jk56kl45lm45lm34mn34mn23no23no23no12op12op12op12op01pq01pq01pq01pq01pq01pq01pq01pq01pq01pq01pq12op12op12op12op23no23no23no34mn34mn45lm45lm56kl67jk67jk78ij89hi9:gh:;fg;<ef<=de=?bd?@ab@B_aBD]_DGZ]GKVZKVVV",
+  66: "LVVVHLVZEHZ]CE]_AC_a?Aac>?cd<>df;<fg:;gh9:hi89ij78jk78jk67kl56lm56lm45mn45mn34no34no23op23op23op12pq12pq12pq12pq01qr01qr01qr01qr01qr01qr01qr01qr01qr01qr12pq12pq12pq12pq23op23op23op34no34no45mn45mn56lm56lm67kl78jk78jk89ij9:hi:;gh;<fg<>df>?cd?AacAC_aCE]_EHZ]HLVZLVVV",
+  67: "MVVVHMV[EH[^CE^`AC`b?Abd>?de=>ef<=fg:<gi9:ij9:ij89jk78kl67lm56mn56mn45no45no34op34op23pq23pq23pq12qr12qr12qr12qr12qr01rs01rs01rs01rs01rs01rs01rs01rs01rs12qr12qr12qr12qr12qr23pq23pq23pq34op34op45no45no56mn56mn67lm78kl89jk9:ij9:ij:<gi<=fg=>ef>?de?AbdAC`bCE^`EH[^HMV[MVVV",
+  68: "MWWWIMW[EI[_CE_aBCab@Bbd>@df=>fg<=gh;<hi:;ij9:jk89kl78lm67mn67mn56no45op45op34pq34pq23qr23qr23qr23qr12rs12rs12rs12rs01st01st01st01st01st01st01st01st01st01st12rs12rs12rs12rs23qr23qr23qr23qr34pq34pq45op45op56no67mn67mn78lm89kl9:jk:;ij;<hi<=gh=>fg>@df@BbdBCabCE_aEI[_IMW[MWWW",
+  69: "MXXXIMX\\FI\\_DF_aBDac@Bce?@ef=?fh<=hi;<ij:;jk9:kl89lm78mn78mn67no56op56op45pq45pq34qr34qr23rs23rs23rs12st12st12st12st01st01tu01tu01tu01tu01tu01tu01tu01tu01tu01st12st12st12st12st23rs23rs23rs34qr34qr45pq45pq56op56op67no78mn78mn89lm9:kl:;jk;<ij<=hi=?fh?@ef@BceBDacDF_aFI\\_INW\\NWWW",
+  70: "NXXXJNX\\FJ\\`DF`bBDbd@Bdf?@fg>?gh=>hi;=ik:;kl9:lm9:lm89mn78no67op56pq56pq45qr45qr34rs34rs23st23st23st12tu12tu12tu12tu12tu01uv01uv01uv01uv01uv01uv01uv01uv01uv01uv12tu12tu12tu12tu12tu23st23st23st34rs34rs45qr45qr56pq56pq67op78no89mn9:lm9:lm:;kl;=ik=>hi>?gh?@fg@BdfBDbdDF`bFI]`INX]NXXX"
+};
+/*@/GDI_ELLIPSES@*/
+const Gdi = {
+  font(g, px, face = 'Tahoma', bold = false) { g.font = `${bold ? 'bold ' : ''}${px}px "${face}"`; g.gdiFont = [face, px]; },
+  table(g) {
+    const [face, px] = g.gdiFont || ['Tahoma', 13], m = GDI_FONTS[face], i = px - 5;
+    return m && i >= 0 && i < m.a.length ? [m, i] : [null, 0];
+  },
+  metrics(g) {
+    const [m, i] = this.table(g), px = (g.gdiFont || ['', 13])[1];
+    return m ? [m.a[i], m.d[i]] : [px, Math.round(px * 0.21)];
+  },
+  height(g) { const [a, d] = this.metrics(g); return a + d; },
+  charWidth(g, ch) {
+    const [m, i] = this.table(g), c = ch.charCodeAt(0);
+    return m && c >= 32 && c <= 126 ? m.w[i].charCodeAt(c - 32) - 32 : Math.round(g.measureText(ch).width);
+  },
+  width(g, s) { let w = 0; for (const ch of s) w += this.charWidth(g, ch); return w; },
+  text(g, s, x, y) {
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    const base = y + this.metrics(g)[0];
+    for (const ch of s) { g.fillText(ch, x, base); x += this.charWidth(g, ch); }
+  },
+  centred(g, s, l, t, w, h) { this.text(g, s, l + Math.trunc((w - this.width(g, s)) / 2), t + Math.trunc((h - this.height(g)) / 2)); },
+  // FrameRect: a one-pixel border just inside l, t, r, b (fillStyle)
+  frameRect(g, l, t, r, b) {
+    if (r <= l || b <= t) return;
+    g.fillRect(l, t, r - l, 1); g.fillRect(l, b - 1, r - l, 1); g.fillRect(l, t, 1, b - t); g.fillRect(r - 1, t, 1, b - t);
+  },
+  // MoveTo + LineTo with a 3-pixel pen (round ends), across or down: GDI covers the
+  // rows (columns) beside the line from end to end and the line's own one a pixel further
+  line3(g, x0, y0, x1, y1) {
+    if (y0 === y1) {
+      const a = Math.min(x0, x1), b = Math.max(x0, x1);
+      g.fillRect(a, y0 - 1, b - a + 1, 1); g.fillRect(a, y0 + 1, b - a + 1, 1); g.fillRect(a - 1, y0, b - a + 3, 1);
+    } else {
+      const a = Math.min(y0, y1), b = Math.max(y0, y1);
+      g.fillRect(x0 - 1, a, 1, b - a + 1); g.fillRect(x0 + 1, a, 1, b - a + 1); g.fillRect(x0, a - 1, 1, b - a + 3);
+    }
+  },
+  // Ellipse with a one-pixel pen and a brush in l, t, r, b: GDI's circles as measured
+  // (GDI_ELLIPSES: per row where the pen, the brush and the pen again start, and where it
+  // ends); other ellipses only roughly
+  ellipse(g, l, t, r, b, pen, brush) {
+    const d = r - l, rows = d === b - t ? GDI_ELLIPSES[d] : null;
+    if (!rows) {
+      g.beginPath(); g.ellipse((l + r) / 2, (t + b) / 2, (r - l - 1) / 2, (b - t - 1) / 2, 0, 0, 7);
+      g.fillStyle = brush; g.fill(); g.strokeStyle = pen; g.lineWidth = 1; g.stroke();
+      return;
+    }
+    for (let y = 0; y < d; y++) {
+      const [a, s, c, e] = [0, 1, 2, 3].map(k => rows.charCodeAt(y * 4 + k) - 48);
+      g.fillStyle = pen; g.fillRect(l + a, t + y, s - a, 1); g.fillRect(l + c, t + y, e - c, 1);
+      g.fillStyle = brush; g.fillRect(l + s, t + y, c - s, 1);
+    }
+  },
+  // Polygon with a one-pixel pen and a brush, pixel for pixel as GDI draws it: the brush
+  // covers each pixel whose corner point lies inside (even-odd), then the pen draws each
+  // edge without its last point, the minor axis rounded to nearest (halves down)
+  polygon(g, pts, pen, brush) {
+    const n = pts.length, ys = pts.map(p => p[1]), xs = pts.map(p => p[0]);
+    const l = Math.min(...xs), r = Math.max(...xs);
+    g.fillStyle = brush;
+    for (let y = Math.min(...ys); y <= Math.max(...ys); y++) {
+      const cuts = [];
+      for (let i = 0; i < n; i++) {
+        const [ax, ay] = pts[i], [bx, by] = pts[(i + 1) % n];
+        if ((ay > y) !== (by > y)) cuts.push(ax + (y - ay) * (bx - ax) / (by - ay));
+      }
+      let run = null;
+      for (let x = l; x <= r + 1; x++) {
+        const inside = x <= r && cuts.filter(c => x < c).length % 2 === 1;
+        if (inside && run === null) run = x;
+        else if (!inside && run !== null) { g.fillRect(run, y, x - run, 1); run = null; }
+      }
+    }
+    const near = (num, den) => { const q = Math.floor(num / den); return 2 * (num - q * den) > den ? q + 1 : q; };
+    g.fillStyle = pen;
+    for (let i = 0; i < n; i++) {
+      const [x0, y0] = pts[i], [x1, y1] = pts[(i + 1) % n];
+      const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0), sx = x1 > x0 ? 1 : -1, sy = y1 > y0 ? 1 : -1;
+      if (dx >= dy) for (let k = 0; k < dx; k++) g.fillRect(x0 + k * sx, y0 + near(k * (y1 - y0), dx), 1, 1);
+      else for (let k = 0; k < dy; k++) g.fillRect(x0 + near(k * (x1 - x0), dy), y0 + k * sy, 1, 1);
+    }
+  },
+};
+
 /* ---------------------------------------------------------------- API */
 
 const Api = {
@@ -154,7 +432,7 @@ const DB = {
 
 const Settings = {
   v: { buttons: true, illusionary: false, monsters: false, items: false, hints: false, notes: false,
-       debug: false, zoom: 0, slot: 1 },
+       debug: false, zoom: 0, slot: 1, size3: 0 },   // size3: ASE3's map window (480 + 30 n pixels), 0 fits the page
   load() { try { Object.assign(this.v, JSON.parse(localStorage.getItem('ase.settings') || '{}')); } catch {} },
   save() { try { localStorage.setItem('ase.settings', JSON.stringify(this.v)); } catch {} },
 };
@@ -252,11 +530,14 @@ const GAMES = {
 };
 // AESOP.EXE's own message, in conventional memory while EOB 3 runs
 const EOB3_SIGN = new TextEncoder().encode('Eye of the Beholder III requires');
+// where the originals (with the API's dbxapi32.dll) see the emulated RAM: their dumps and
+// debug lines give addresses there, and so do the page's
+const RAM_WINDOW = 0x1000000;
 
 /* -------------------------------------------------------- the game */
 
 const Game = {
-  id: 0, cfg: null, char0: 0, tables: null, info: null,
+  id: 0, cfg: null, char0: 0, tables: null, info: null, tick: 0,   // tick: the main loop's passes
   chars: null, coords: null, map: null, items: null, monsters: null, names: [],
   mapAddr: 0, locAddr: 0,   // EOB 3
   get level() { return this.id === 3 ? this.coords[3] : this.coords[0] | this.coords[1] << 8; },
@@ -326,10 +607,11 @@ const Game = {
     const [map, loc] = await Promise.all([Api.read(this.mapAddr, 1024), Api.read(this.locAddr, 4)]);
     Object.assign(this, { map, coords: loc });
   },
-  // the location still makes sense and the map is a map with the party on open floor
+  // the location still makes sense (ASE3's test: the party may stand in a wall, Teleport
+  // puts it anywhere) and there is still a level map where it was
   valid3() {
     const c = this.coords;
-    return c[0] < 32 && c[1] < 32 && c[2] < 4 && c[3] >= 1 && c[3] <= 14 && isMap3(this.map, 0) && this.map[this.block] === 0xFF;
+    return c[0] < 32 && c[1] < 32 && c[2] < 4 && c[3] >= 1 && c[3] <= 14 && isMap3(this.map, 0);
   },
   async poll() {
     if (this.id === 3) return this.poll3();
@@ -588,6 +870,7 @@ const Store = {
   // none): ASE's start and its "Copy explored from slot"
   async loadSlot(slot) {
     this.flush();
+    this.loadedSlot = slot;
     for (let lv = 1; lv <= Game.cfg.levels; lv++) {
       const m = toExp(await DB.get('kv', 'exp:' + this.skey(slot, lv)));
       this.work[this.wkey(lv)] = m;
@@ -595,6 +878,7 @@ const Store = {
       this.notes[this.wkey(lv)] = (await DB.get('kv', 'notes:' + this.skey(slot, lv))) || {};
       await DB.put('kv', 'notes:' + this.wkey(lv), this.notes[this.wkey(lv)]);
     }
+    await this.refreshSlots();
     this.gen++;
     await Render.refreshAux(); Render.draw();
   },
@@ -606,9 +890,18 @@ const Store = {
       await DB.put('kv', 'exp:' + this.skey(slot, lv), m.buffer.slice(0));
       await DB.put('kv', 'notes:' + this.skey(slot, lv), this.notes[this.wkey(lv)] || (await DB.get('kv', 'notes:' + this.wkey(lv))) || {});
     }
+    await this.refreshSlots();
   },
   async clearSlot(slot) {
     for (let lv = 1; lv <= Game.cfg.levels; lv++) { await DB.del('kv', 'exp:' + this.skey(slot, lv)); await DB.del('kv', 'notes:' + this.skey(slot, lv)); }
+    await this.refreshSlots();
+  },
+  // the save slots with explored maps kept (ASE's ASE_<n>\ folders)
+  slots: new Set(),
+  async refreshSlots() {
+    const pre = `exp:${Game.id}:`;
+    this.slots = new Set((await DB.keys('kv')).filter(k => typeof k === 'string' && k.startsWith(pre))
+      .map(k => +k.slice(pre.length).split(':')[0]).filter(n => n > 0));
   },
   async notesOf(level) {
     const k = this.wkey(level);
@@ -630,23 +923,30 @@ setInterval(() => Store.flush(), 3000);
 
 // ASE copies the working set to a slot when the game saves there: the save
 // file of a slot gets a newer date (EOB 1: EOBDATA.SAV; EOB 2: EOBDATA0-5.SAV;
-// EOB 3 keeps the newest slot's copy up to date all the time); needs the game folder
+// EOB 3: SAVEGAME\ITEMS_01-12.BIN, ASE3 looks every second); needs the game folder
 const SavePeek = {
-  last: 0, slot: 0, next: 0, gen: -1, busy: false,
+  last: 0, slot: 0, next: 0, busy: false,
+  names() {
+    return Game.id === 3 ? Array.from({ length: 12 }, (_, i) => `SAVEGAME/ITEMS_${pad2(i + 1)}.BIN`)
+      : Game.id === 1 ? ['EOBDATA.SAV'] : Array.from({ length: 6 }, (_, i) => `EOBDATA${i}.SAV`);
+  },
+  // the newest save: [slot, date] (the first of equally new ones), [0, 0] without any
+  async newest() {
+    const names = this.names();
+    let slot = 0, date = 0;
+    for (let i = 0; i < names.length; i++) { const d = await Files.date(names[i]); if (d && d > date) { date = d; slot = i + 1; } }
+    return [slot, date];
+  },
   async tick() {
     if (!Files.has() || this.busy || Date.now() < this.next) return;
     this.busy = true;
     try {
       this.next = Date.now() + (Game.id === 3 ? 1000 : 2000);
-      const names = Game.id === 3 ? Array.from({ length: 12 }, (_, i) => `SAVEGAME/ITEMS_${pad2(i + 1)}.BIN`)
-        : Game.id === 1 ? ['EOBDATA.SAV'] : Array.from({ length: 6 }, (_, i) => `EOBDATA${i}.SAV`);
-      let slot = 0, date = 0;
-      for (let i = 0; i < names.length; i++) { const d = await Files.date(names[i]); if (d && d > date) { date = d; slot = i + 1; } }
+      const [slot, date] = await this.newest();
       if (!slot) return;
       this.slot = slot;
-      if (Game.id === 3) {
-        if (Store.gen !== this.gen) { this.gen = Store.gen; await Store.snapshot(slot); }
-      } else if (this.last && date > this.last) {
+      const own = Files.written[this.names()[slot - 1].toLowerCase()];   // the page's own writes are not the game saving
+      if (this.last && date > this.last && !(own && Math.abs(date - own) < 10000)) {
         await Store.snapshot(slot);
         log(`The game saved to slot ${slot}: the explored maps were copied to that slot`);
       }
@@ -683,7 +983,8 @@ const CENTER_CATS = new Set([7, 9, 11, 12, 18, 19, 28, 29, 30, 31, 32]);        
 const AseData = {
   blocks: {}, items: {},
   async load() {
-    const lines = b => b ? new TextDecoder('latin1').decode(b).split(/\r?\n/) : null;
+    // a text file's lines as Delphi's TStringList reads them (no empty last line after the last break)
+    const lines = b => b ? new TextDecoder('latin1').decode(b).replace(/\r?\n$/, '').split(/\r?\n/) : null;
     for (const id of [1, 2]) {
       const get = name => DB.get('files', `ASE:EOB${id}/${name}`);
       const b = await get('Blocks.dat');
@@ -791,7 +1092,7 @@ const Cells = {
       if (!m.block || m.block > 1023 || m.hpCur <= 0 || !expCell(e, m.block)) continue;
       this.monsters[m.block]++;
       this.monList.push({ b: m.block, name: Game.monsterName(m), hpCur: m.hpCur, hpMax: m.hpMax,
-        debug: `$${hex(base + i * s, 6)}: ${hexBytes(Game.monsters.subarray(i * s), s)}` });
+        debug: `$${hex(RAM_WINDOW + base + i * s, 6)}: ${hexBytes(Game.monsters.subarray(i * s), s)}` });
     }
   },
   // items of this level in cells with anything explored (in niches too)
@@ -803,7 +1104,7 @@ const Cells = {
       if (!expCell(e, b) && !expFace(e, b, 0) && !expFace(e, b, 1) && !expFace(e, b, 2) && !expFace(e, b, 3)) continue;
       this.items[b]++;
       this.itemList.push({ b, name: Game.itemName(it),
-        debug: `${String(i).padStart(4, '0')}. $${hex(base + i * 14, 6)}: ${hexBytes(Game.items.subarray(i * 14), 14)}` });
+        debug: `${String(i).padStart(4, '0')}. $${hex(RAM_WINDOW + base + i * 14, 6)}: ${hexBytes(Game.items.subarray(i * 14), 14)}` });
     }
   },
 };
@@ -817,10 +1118,10 @@ function partyExplore() {
     }
     return;
   }
-  // ASE: the party's cell, the faces of the four cells around it that look
-  // at the party, and those cells entirely when they are floor (as of the
-  // last tick's cell information) - nothing further ahead
-  Store.mark(lv, ei(b, 0));
+  // ASE: the party's cell and its four faces, the faces of the four cells
+  // around it that look at the party, and those cells entirely when they are
+  // floor (as of the last tick's cell information) - nothing further ahead
+  for (let f = 0; f < 5; f++) Store.mark(lv, ei(b, f));
   for (let d = 0; d < 4; d++) {
     const n = neighbour(b, d);
     if (n < 0) continue;
@@ -874,14 +1175,8 @@ function paintGlyph(g, cat, cs) {
   const W = '#584939', mid = cs >> 1;
   const fill = (x1, y1, x2, y2, c) => { g.fillStyle = c; g.fillRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1)); };
   const frame = (x1, y1, x2, y2, c) => { fill(x1, y1, x2, y1 + 1, c); fill(x1, y2 - 1, x2, y2, c); fill(x1, y1, x1 + 1, y2, c); fill(x2 - 1, y1, x2, y2, c); };
-  const ellipse = (x1, y1, x2, y2, pen, brush) => {
-    g.beginPath(); g.ellipse((x1 + x2) / 2, (y1 + y2) / 2, (x2 - x1 - 1) / 2, (y2 - y1 - 1) / 2, 0, 0, 7);
-    g.fillStyle = brush; g.fill(); g.strokeStyle = pen; g.lineWidth = 1; g.stroke();
-  };
-  const poly = (pts, c) => {
-    g.beginPath(); g.moveTo(pts[0][0] + 0.5, pts[0][1] + 0.5); for (const p of pts.slice(1)) g.lineTo(p[0] + 0.5, p[1] + 0.5); g.closePath();
-    g.fillStyle = c; g.fill(); g.strokeStyle = c; g.lineWidth = 1; g.stroke();
-  };
+  const ellipse = (x1, y1, x2, y2, pen, brush) => Gdi.ellipse(g, x1, y1, x2, y2, pen, brush);
+  const poly = (pts, c) => Gdi.polygon(g, pts, c, c);
   const bar = inner => { fill(0, mid - 3, cs, mid + 3, W); fill(0, mid - 2, cs, mid + 2, inner); };
   const stubs = inner => { fill(0, mid - 3, 3, mid + 3, W); fill(0, mid - 2, 2, mid + 2, inner); fill(cs, mid - 3, cs - 3, mid + 3, W); fill(cs, mid - 2, cs - 2, mid + 2, inner); };
   const knob = c => { fill(mid - 3, 0, mid + 3, 5, W); fill(mid - 2, 0, mid + 2, 4, c); };
@@ -904,8 +1199,7 @@ function paintGlyph(g, cat, cs) {
     case 16: case 21: case 23: case 24: knob('#AA0000'); break;
     case 17: cell('#BBBBBB'); break;
     case 18: ellipse(3, 3, cs - 3, cs - 3, '#666666', '#222222'); break;
-    case 19: cell('#00AAAA'); g.fillStyle = '#EEEEEE'; g.font = `${Math.round(mid * 4 / 3)}px Tahoma, sans-serif`;
-      g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('T', mid, mid); break;
+    case 19: cell('#00AAAA'); g.fillStyle = '#EEEEEE'; Gdi.font(g, Math.round(mid * 4 / 3), 'Tahoma'); Gdi.centred(g, 'T', 0, 0, cs, cs); break;
     case 20: frame(2, 0, cs - 2, 7, W); fill(3, 0, cs - 3, 6, '#FF00CC'); break;
     case 25: cell('#AA0000'); break;
     case 26: ellipse(3, 3, cs - 3, cs - 3, '#770000', '#AA0000'); break;
@@ -918,12 +1212,15 @@ function paintGlyph(g, cat, cs) {
 }
 
 const Render = {
-  canvas: $('#map'), mouse: null, lastMouse: { x: -1, y: -1 }, mouseAt: 0, peekUntil: 0, hintList: [], hintAt: {}, notes: {}, tipTimer: 0,
+  canvas: $('#map'), mouse: null, lastMouse: { x: -1, y: -1 }, lastXY: [], mouseAt: 0, peekUntil: 0, hintList: [], hintAt: {}, notes: {}, tipTimer: 0,
   cellSize() {
-    const wrap = $('#mapwrap'), z = Settings.v.zoom;
+    const wrap = $('#mapwrap'), z = Game.id === 3 ? Settings.v.size3 >> 5 : Settings.v.zoom;
     if (z > 0) return z;
     return Math.max(8, Math.floor(Math.min(wrap.clientWidth, wrap.clientHeight) / 32));
   },
+  // ASE3's window is size3 square, its map (32 cells of size3 div 32) in the middle
+  side3() { return Settings.v.size3 > 0 ? Settings.v.size3 : this.cellSize() * 32; },
+  offset3() { return (this.side3() - this.cellSize() * 32) >> 1; },
   async refreshAux() {
     if (!Game.coords) return;
     this.hintList = await Hints.get(Game.level);
@@ -967,56 +1264,71 @@ const Render = {
   // a clue book hint: a bright green cell with its number
   hint(g, X, Y, cs, id) {
     g.fillStyle = '#00FF00'; g.fillRect(X, Y, cs, cs);
-    g.fillStyle = '#000'; g.font = `${Math.max(1, Math.round(Math.trunc(cs / 2.7) * 4 / 3))}px "Arial Narrow", "Liberation Sans Narrow", Arial, sans-serif`;
-    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(id, X + cs / 2, Y + cs / 2);
+    g.fillStyle = '#000'; Gdi.font(g, Math.max(1, Math.round(Math.trunc(cs / 2.7) * 4 / 3)), 'Arial Narrow');
+    Gdi.centred(g, String(id), X, Y, cs, cs);
   },
   // a note: a cyan cell with "!"
   note(g, X, Y, cs) {
     g.fillStyle = '#33CCCC'; g.fillRect(X, Y, cs, cs);
-    g.fillStyle = '#000'; g.font = `bold ${Math.round((cs >> 1) * 4 / 3)}px Tahoma, sans-serif`;
-    g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('!', X + cs / 2, Y + cs / 2);
+    g.fillStyle = '#000'; Gdi.font(g, Math.round((cs >> 1) * 4 / 3), 'Tahoma', true); Gdi.centred(g, '!', X, Y, cs, cs);
   },
-  // EOB 3 like ASE3: explored open cells, 3-px walls on the edges towards wall cells
+  // EOB 3: ASE3's window, its map in the middle (the same drawing as the saved games' preview)
   draw3() {
-    const cs = this.cellSize(), c = this.canvas, g = c.getContext('2d'), size = cs * 32, m = Game.map;
-    if (c.width !== size) { c.width = size; c.height = size; }
-    g.fillStyle = COLORS.rock3; g.fillRect(0, 0, size, size);
+    const cs = this.cellSize(), side = this.side3(), off = this.offset3(), c = this.canvas, g = c.getContext('2d'), m = Game.map;
+    if (c.width !== side || c.height !== side) { c.width = side; c.height = side; }
+    g.fillStyle = COLORS.rock3; g.fillRect(0, 0, side, side);
     const exp = Store.exp(Game.level), peek = Date.now() < this.peekUntil;
     $('#peek').classList.toggle('hidden', !peek);
-    const open = b => m[b] === 0xFF && (peek || exp[b]);
+    g.translate(off, off);
+    this.map3(g, cs, m, b => m[b] === 0xFF && (peek || exp[b]), Game,
+      this.mouse && Date.now() - this.mouseAt < 2000 ? this.mouse : null, Settings.v.notes ? this.notes : null);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+  },
+  // ASE3's DrawMap of 32 x 32 cells of cs pixels: the explored open cells (a pixel short of the
+  // cell's right and bottom edge), a 3-pixel pen line on the cell edges towards cells that aren't
+  // open (the map's own edges excepted), the party's triangle (party: x, y, dir), the mouse's
+  // cell framed; what falls outside the map's square is cut off, as in ASE3's bitmap
+  map3(g, cs, m, shown, party, hover, notes) {
+    const size = cs * 32;
+    g.save(); g.beginPath(); g.rect(0, 0, size, size); g.clip();
+    g.fillStyle = COLORS.rock3; g.fillRect(0, 0, size, size);
     g.fillStyle = COLORS.floor3;
-    for (let b = 0; b < 1024; b++) if (open(b)) g.fillRect((b & 31) * cs, (b >> 5) * cs, cs, cs);
+    for (let b = 0; b < 1024; b++) if (shown(b)) g.fillRect((b & 31) * cs, (b >> 5) * cs, cs - 1, cs - 1);
     g.fillStyle = COLORS.wall3;
     for (let b = 0; b < 1024; b++) {
-      if (!open(b)) continue;
-      const x = b & 31, y = b >> 5, X = x * cs, Y = y * cs;
-      if (y > 0 && m[b - 32] !== 0xFF) g.fillRect(X - 1, Y - 1, cs + 2, 3);
-      if (x < 31 && m[b + 1] !== 0xFF) g.fillRect(X + cs - 1, Y - 1, 3, cs + 2);
-      if (y < 31 && m[b + 32] !== 0xFF) g.fillRect(X - 1, Y + cs - 1, cs + 2, 3);
-      if (x > 0 && m[b - 1] !== 0xFF) g.fillRect(X - 1, Y - 1, 3, cs + 2);
+      if (!shown(b)) continue;
+      const x = b & 31, y = b >> 5, L = x * cs - 1, T = y * cs - 1, R = (x + 1) * cs - 1, B = (y + 1) * cs - 1;
+      if (y > 0 && m[b - 32] !== 0xFF) Gdi.line3(g, L, T, R, T);
+      if (x < 31 && m[b + 1] !== 0xFF) Gdi.line3(g, R, T, R, B);
+      if (y < 31 && m[b + 32] !== 0xFF) Gdi.line3(g, L, B, R, B);
+      if (x > 0 && m[b - 1] !== 0xFF) Gdi.line3(g, L, T, L, B);
     }
-    if (Settings.v.notes) {
+    if (notes) {   // the page's notes (ASE3 has none)
       g.font = `bold ${Math.max(9, Math.round(cs * 0.36))}px Tahoma, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = COLORS.note;
-      for (const [b, text] of Object.entries(this.notes)) g.fillText(text.split('\n')[0].slice(0, 3), (b & 31) * cs + cs / 2, (b >> 5) * cs + cs / 2);
+      for (const [b, text] of Object.entries(notes)) g.fillText(text.split('\n')[0].slice(0, 3), (b & 31) * cs + cs / 2, (b >> 5) * cs + cs / 2);
     }
-    // the party: a triangle 2 px inside the cell, green with a dark green outline
-    const px = Game.x * cs + 2, py = Game.y * cs + 2, d = Game.dir, w = cs - 4;
-    const pts = [[0.5, 0], [1, 1], [0, 1]].map(([u, v]) => {
-      const [rx, ry] = d === 0 ? [u, v] : d === 1 ? [1 - v, u] : d === 2 ? [1 - u, 1 - v] : [v, 1 - u];
-      return [px + rx * w, py + ry * w];
-    });
-    g.beginPath(); g.moveTo(...pts[0]); g.lineTo(...pts[1]); g.lineTo(...pts[2]); g.closePath();
-    g.fillStyle = COLORS.party3; g.fill(); g.strokeStyle = COLORS.party3edge; g.lineWidth = 1; g.stroke();
-    // the cell under the mouse, for 2 seconds after the mouse moved
-    if (this.mouse && Date.now() - this.mouseAt < 2000) {
-      g.strokeStyle = COLORS.hover3; g.lineWidth = 3;
-      g.strokeRect(this.mouse.x * cs + 1.5, this.mouse.y * cs + 1.5, cs - 3, cs - 3);
+    if (party) {   // ASE3's triangle, pointing the way the party faces (N, E, S, else W)
+      const c = cs, h = (c * 32) >> 6, X = party.x * cs, Y = party.y * cs;
+      const tri = [[[2, c - 4], [h, 2], [c - 4, c - 4]], [[2, 2], [c - 4, h], [2, c - 4]],
+        [[2, 2], [h, c - 4], [c - 4, 2]], [[c - 4, 2], [2, h], [c - 4, c - 4]]][Math.min(party.dir, 3)];
+      Gdi.polygon(g, tri.map(([x, y]) => [X + x, Y + y]), COLORS.party3edge, COLORS.party3);
     }
+    // the mouse's cell (for 2 seconds after the mouse moved): three frames, from a pixel
+    // outside the cell inwards
+    if (hover) {
+      const X = hover.x * cs, Y = hover.y * cs;
+      g.fillStyle = COLORS.hover3;
+      for (let k = -1; k <= 1; k++) Gdi.frameRect(g, X + k, Y + k, X + cs - 1 - k, Y + cs - 1 - k);
+    }
+    g.restore();
   },
+  // the cell under the mouse; EOB 3: only over ASE3's map square, not the window around it
   cellAt(ev) {
-    const r = this.canvas.getBoundingClientRect(), cs = this.canvas.width / 32;
-    const x = Math.floor((ev.clientX - r.left) / cs), y = Math.floor((ev.clientY - r.top) / cs);
-    return x >= 0 && y >= 0 && x < 32 && y < 32 ? { x, y, b: y * 32 + x } : null;
+    const r = this.canvas.getBoundingClientRect(), eob3 = Game.id === 3;
+    const cs = eob3 ? this.cellSize() : this.canvas.width / 32, off = eob3 ? this.offset3() : 0;
+    const px = ev.clientX - r.left - off, py = ev.clientY - r.top - off;
+    const x = Math.floor(px / cs), y = Math.floor(py / cs);
+    return px >= 0 && py >= 0 && x < 32 && y < 32 ? { x, y, b: y * 32 + x } : null;
   },
 };
 
@@ -1051,9 +1363,10 @@ function tipText(b) {
   if (out.at(-1) === '') out.pop();
   return out.join('\n');
 }
-// EOB 3: the cell's contents
+// EOB 3: ASE3 has no tooltip; the page shows its notes, and the cell in debug mode
 function describeCell3(c) {
   const b = c.b, lines = [`${pad2(c.x + 1)},${pad2(c.y + 1)}`];
+  if (!(Settings.v.notes && Render.notes[b]) && !Settings.v.debug) return null;
   if (!(Date.now() < Render.peekUntil || Store.exp(Game.level)[b] || Settings.v.debug)) return lines.join('\n') + '  (unexplored)';
   lines.push(Game.map[b] === 0xFF ? 'open' : 'wall');
   if (Render.notes[b]) lines.push('Note: ' + Render.notes[b]);
@@ -1124,12 +1437,18 @@ async function loop() {
         if (Store.loadedFor !== Game.id) {   // like ASE's start: the explored maps of the chosen save slot
           Store.loadedFor = Game.id;
           if (Game.id !== 3) await importExplored12();
-          await Store.loadSlot(Game.cfg.slots === 1 ? 1 : Settings.v.slot);
+          // ASE3 starts with the newest save chosen, or the one clicked in its list
+          const slot3 = Game.id === 3 ? Saves3.picked || (Files.has() && (await SavePeek.newest())[0]) : 0;
+          await Store.loadSlot(slot3 || (Game.cfg.slots === 1 ? 1 : Settings.v.slot));
         }
+        if (Game.id === 3) SavePeek.last = 0;   // ASE3's map window takes the newest save's date when it opens
       }
       await Game.poll();
       if (Game.id === 3 ? !Game.valid3() : !(Game.chars[1] & 1) || Game.level < 1 || Game.level > Game.cfg.levels) {
-        if (Game.id === 3) log(`EOB 3: location (${[...Game.coords].map(v => hex(v, 2)).join(' ')}) or map no longer valid, searching again`);
+        if (Game.id === 3) {   // ASE3 keeps the explored maps in the newest save's slot before it gives up
+          log(`EOB 3: location (${[...Game.coords].map(v => hex(v, 2)).join(' ')}) or map no longer valid, searching again`);
+          if (Files.has()) { const [slot] = await SavePeek.newest(); if (slot) await Store.snapshot(slot); }
+        }
         Game.cfg = null; $('#tip').style.display = 'none'; continue;
       }
       setConn(`DOSBox ${Game.info.version.split(' ')[0]}`, 'ok');
@@ -1147,6 +1466,7 @@ async function loop() {
       Render.draw();
       Editor.refresh();
       SavePeek.tick();
+      Game.tick++;
     } catch (e) {
       setConn('DOSBox not answering', 'bad');
       Game.cfg = null;
@@ -1166,23 +1486,34 @@ function showMsg(title, text = '') {
 
 const cv = Render.canvas;
 cv.addEventListener('mousemove', ev => {
+  if (ev.clientX === Render.lastXY[0] && ev.clientY === Render.lastXY[1]) return;   // the browser's own (after layout changes)
+  Render.lastXY = [ev.clientX, ev.clientY];
   const c = Render.cellAt(ev);
+  if (Game.id === 3 && !c) return;   // ASE3: the window around its map takes no mouse
   Render.mouse = c; Render.mouseAt = Date.now();
   if (c) Render.lastMouse = c;
   updateTitle();
   if (Game.id === 3) Render.draw();
   const tip = $('#tip');
-  clearTimeout(Render.tipTimer);
   const text = c && Game.map && Game.coords && (Game.id === 3 ? describeCell3(c) : hasTip(c.b) ? tipText(c.b) : null);
-  if (!text) { tip.style.display = 'none'; return; }
+  if (!text) { clearTimeout(Render.tipTimer); Render.tipTimer = 0; tip.style.display = 'none'; return; }
   tip.textContent = text;
   tip.style.display = 'block';
   tip.style.left = Math.min(ev.clientX + 16, innerWidth - tip.offsetWidth - 4) + 'px';
   tip.style.top = Math.min(ev.clientY + 16, innerHeight - tip.offsetHeight - 4) + 'px';
-  Render.tipTimer = setTimeout(() => { tip.style.display = 'none'; }, 5000);   // the original's hint window hides after 5 s
+  // the original's hint window hides 5 s after it appeared: moving on to other cells with
+  // something to tell does not put that off, a cell with nothing hides it at once
+  if (!Render.tipTimer) Render.tipTimer = setTimeout(() => { tip.style.display = 'none'; Render.tipTimer = 0; }, 5000);
 });
-cv.addEventListener('mouseleave', () => { Render.mouse = null; $('#tip').style.display = 'none'; Render.draw(); updateTitle(); });
-cv.addEventListener('mousedown', ev => { if (ev.button === 0 && ev.ctrlKey) addNote(); });   // Ctrl+click adds a note, like the original
+cv.addEventListener('mouseleave', () => {   // the tooltip stays its 5 seconds, as the original's
+  if (Game.id === 3) return;   // ASE3 keeps the mouse's cell (framed until its 2 seconds are over)
+  Render.mouse = null; Render.draw(); updateTitle();
+});
+cv.addEventListener('mousedown', ev => {   // Ctrl+click adds a note, like the original
+  if (ev.button !== 0 || !ev.ctrlKey) return;
+  const c = Render.cellAt(ev);
+  if (c) { Render.lastMouse = c; setTimeout(() => addNote(c), 0); }
+});
 cv.addEventListener('contextmenu', ev => { ev.preventDefault(); Menu.show(ev.clientX, ev.clientY); });
 $('#menuBtn').onclick = ev => { const r = ev.target.getBoundingClientRect(); Menu.show(r.right - 240, r.bottom); };
 window.addEventListener('resize', () => Render.draw());
@@ -1191,10 +1522,12 @@ document.addEventListener('keydown', ev => {
   if (ev.target.closest('input, select, textarea')) return;
   const k = ev.key.toLowerCase(), s = Settings.v;
   const toggle = key => () => { s[key] = !s[key]; Settings.save(); Render.draw(); };
+  // the menus' keys: ASE's PgUp makes the map smaller, ASE3's larger
   const eob12 = Game.id !== 3 ? { b: toggle('buttons'), w: toggle('illusionary'), m: toggle('monsters'), i: toggle('items'),
-    h: toggle('hints') } : { e: () => Editor.open() };
+    h: toggle('hints'), pageup: () => zoomBy(-1), pagedown: () => zoomBy(+1) }
+    : { e: () => Editor.open(), pageup: () => size3By(+1), pagedown: () => size3By(-1) };
   const act = ev.ctrlKey ? { e: () => Editor.open(), s: backupSave, m: exportMap, d: toggleDebug, q: quit }[k]
-    : { a: addNote, z: peek, x: exploreLevel, t: teleportHere, pageup: () => zoomBy(+1), pagedown: () => zoomBy(-1),
+    : { a: addNote, z: peek, x: exploreLevel, t: teleportHere,
       ...eob12, n: toggle('notes'), r: () => openPdf('manual'), c: () => openPdf('cluebook'),
       escape: () => { Menu.hide(); Dlg.closeTop(); } }[k];
   if (act) { ev.preventDefault(); act(); }
@@ -1213,17 +1546,27 @@ function zoomBy(d) {
   const z = Settings.v.zoom || Render.cellSize();
   Settings.v.zoom = Math.max(14, Math.min(32, (z & ~1) + d * 2)); Settings.save(); Render.draw();
 }
+// ASE3's window: 30 pixels larger or smaller, not below 480
+function size3By(d) {
+  const cur = Settings.v.size3 || Math.max(480, Render.side3());
+  if (d < 0 && cur <= 480) return;
+  Settings.v.size3 = Math.max(480, cur + 30 * d); Settings.save(); Render.draw();
+}
 
 /* ---------------------------------------------------------- actions */
 
-async function addNote() {
-  const c = Render.mouse;
-  if (!c || !Game.coords) return;
+// ASE's: for the cell clicked with Ctrl, or the one the mouse was last over; its question
+// counts from 1 (its title from 0); an empty note removes it; the notes are shown then
+async function addNote(cell) {
+  const c = cell || Render.lastMouse;
+  if (!Game.coords || !c || c.x < 0) return;
   const old = Render.notes[c.b] || '';
-  const text = prompt('Note for this place (the first 3 characters are shown on the map, empty removes it):', old);
+  const text = prompt(`Adding a note at location ${pad2(c.x + 1)},${pad2(c.y + 1)}\n\nEnter a note for this location`, old);
   if (text === null) return;
   await Store.setNote(Game.level, c.b, text.trim());
   Render.notes = await Store.notesOf(Game.level);
+  if (!Settings.v.notes) { Settings.v.notes = true; Settings.save(); }
+  Render.draw();
 }
 // every press adds 2 seconds (the original's 10 ticks)
 function peek() {
@@ -1235,14 +1578,15 @@ function peek() {
 function exploreLevel() { if (Game.coords && confirm('Really set the whole level map explored?')) Store.fill(Game.level, 1); }
 function unexploreLevel() { if (Game.coords && confirm('Really set the whole level map unexplored?')) Store.fill(Game.level, 0); }
 async function teleportHere() {
-  const c = Render.mouse;
-  if (!c || !Game.coords) return;
-  if (Game.id === 3) {
-    if (Game.map[c.b] !== 0xFF && !confirm('That is a wall. Teleport into it anyway?')) return;
+  if (Game.id === 3) {   // ASE3: to the cell the mouse was last over, wall or not
+    const c = Render.lastMouse;
+    if (!Game.coords || c.x < 0) return;
     await Api.write(Game.locAddr, Uint8Array.of(c.x, c.y));
     log(`Teleported to ${pad2(c.x + 1)},${pad2(c.y + 1)}`);
     return;
   }
+  const c = Render.mouse;
+  if (!c || !Game.coords) return;
   await Api.write(Game.addr('coords') + Game.cfg.coordBlock, Uint8Array.of(c.b & 255, c.b >> 8));
   log(`Teleported to ${pad2(c.x)},${pad2(c.y)}`);
 }
@@ -1253,9 +1597,9 @@ function searchAgain() {
 }
 // like the original: bit 40 (identified) in byte 2 of every item, the whole table written back
 async function identifyAll() {
-  const out = Game.items.slice();
+  const a = Game.addr('items'), out = await Api.read(a, Game.cfg.items * 14);   // afresh, as the original
   for (let i = 0; i < Game.cfg.items; i++) out[i * 14 + 2] |= 0x40;
-  await Api.write(Game.addr('items'), out);
+  await Api.write(a, out);
   log('All items identified');
 }
 // the original's: in every item type (16 bytes) byte 5 = 3F (all classes) and
@@ -1269,28 +1613,32 @@ async function itemTweaks() {
   Game.tweaked = true;
   log('Item usability tweaks applied');
 }
+// as the original (EOB 2): the monster table read afresh, the low byte of the hit points
+// set to 1 where it isn't 0, the table written back
 async function weakenMonsters() {
-  const s = Game.cfg.monSize, m = Game.monsters.slice();
-  for (let i = 0; i < 30; i++) if ((m[i * s + 14] | m[i * s + 15] << 8) > 1) { m[i * s + 14] = 1; m[i * s + 15] = 0; }
-  await Api.write(Game.addr('monsters'), m);
+  const s = Game.cfg.monSize, a = Game.addr('monsters'), m = await Api.read(a, 30 * s);
+  for (let i = 0; i < 30; i++) if (m[i * s + 14]) m[i * s + 14] = 1;
+  await Api.write(a, m);
   log('Monsters weakened to 1 HP');
 }
-// what the original does (EOB 2): flag 20 in byte 16 of every monster with hit points
+// the original's: flag 20 in byte 16 of every monster whose hit points' low byte isn't 0
 async function petrifyMonsters() {
-  const s = Game.cfg.monSize, m = Game.monsters.slice();
-  for (let i = 0; i < 30; i++) if (m[i * s + 12] | m[i * s + 13]) m[i * s + 0x16] |= 0x20;
-  await Api.write(Game.addr('monsters'), m);
+  const s = Game.cfg.monSize, a = Game.addr('monsters'), m = await Api.read(a, 30 * s);
+  for (let i = 0; i < 30; i++) if (m[i * s + 14]) m[i * s + 0x16] |= 0x20;
+  await Api.write(a, m);
   log('Monsters petrified');
 }
-// the original's Monsters.txt and Items.txt (addresses are linear ones here)
+// the original's Monsters.txt and Items.txt (the addresses as the original gives them)
 function dumpMonsters() {
   const s = Game.cfg.monSize, m = Game.monsters;
   const cols = Array.from({ length: s }, (_, k) => hex(k, 2)).join(' ');
   const lines = [`##   Address      ${cols}      XX,YY   Hit points`, ''];
   for (let i = 0; i < 30; i++) {
     const r = m.subarray(i * s, i * s + s), block = r[2] | r[3] << 8;
-    let line = `${pad2(i + 1)}   ${hex(Game.addr('monsters') + i * s, 8)}     ${[...r].map(v => hex(v, 2) + ' ').join('')}`;
-    if (block) line += `     ${pad2(block & 31)},${pad2(block >> 5)}   ${String(r[14] | r[15] << 8).padStart(3, '0')} / ${String(r[12] | r[13] << 8).padStart(3, '0')}`;
+    let line = `${pad2(i + 1)}   ${hex(RAM_WINDOW + Game.addr('monsters') + i * s, 8)}     ${[...r].map(v => hex(v, 2) + ' ').join('')}`;
+    // the original's: where and how strong a monster is when it is on the map and its hit
+    // points' low byte isn't 0 (the bytes, not the words)
+    if (block < 1024 && r[14]) line += `     ${pad2(block & 31)},${pad2(block >> 5)}   ${String(r[14]).padStart(3, '0')} / ${String(r[12]).padStart(3, '0')}`;
     lines.push(line);
   }
   download(new Blob([lines.join('\r\n') + '\r\n']), 'Monsters.txt');
@@ -1305,15 +1653,25 @@ function dumpItems() {
     '###   Address    Hex    Item                                 Byte  00 01 02 03 04 05 06 07 08 09 10 11 12 13     Level: XX,YY', ''];
   for (let i = 0; i < Game.cfg.items; i++) {
     const it = Game.item(i), r = Game.items.subarray(i * 14, i * 14 + 14);
-    let line = `${String(i).padStart(3, '0')}   ${hex(Game.addr('items') + i * 14, 8)}   ${hex(i & 255, 2)}${hex(i >> 8, 2)}   ` +
+    let line = `${String(i).padStart(3, '0')}   ${hex(RAM_WINDOW + Game.addr('items') + i * 14, 8)}   ${hex(i & 255, 2)}${hex(i >> 8, 2)}   ` +
       `${Game.itemName(it).padEnd(43)}${[...r].map(v => hex(v, 2) + ' ').join('')}`;
     if (r[12]) { const b = r[6] | r[7] << 8; line += `    ${pad2(r[12])}: ${pad2(b & 31)},${pad2(b >> 5)}`; }
     lines.push(line);
   }
   download(new Blob([lines.join('\r\n') + '\r\n']), 'Items.txt');
 }
+// as the original's: Level_NN.bmp, the map as a 32-bit bitmap (what Delphi's TBitmap saves)
 function exportMap() {
-  Render.canvas.toBlob(b => download(b, `EOB${Game.id} level ${Game.level}.png`));
+  const c = Render.canvas, w = c.width, h = c.height, px = c.getContext('2d').getImageData(0, 0, w, h).data;
+  const size = 54 + w * h * 4, b = new DataView(new ArrayBuffer(size));
+  b.setUint16(0, 0x4D42, true); b.setUint32(2, size, true); b.setUint32(10, 54, true);
+  b.setUint32(14, 40, true); b.setInt32(18, w, true); b.setInt32(22, h, true); b.setUint16(26, 1, true);
+  b.setUint16(28, 32, true); b.setUint32(34, w * h * 4, true);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {   // bottom row first, blue green red
+    const s = ((h - 1 - y) * w + x) * 4, d = 54 + (y * w + x) * 4;
+    b.setUint8(d, px[s + 2]); b.setUint8(d + 1, px[s + 1]); b.setUint8(d + 2, px[s]);
+  }
+  download(new Blob([b.buffer], { type: 'image/bmp' }), `Level_${pad2(Game.level)}.bmp`);
 }
 function toggleDebug() {
   Settings.v.debug = !Settings.v.debug; Settings.save();
@@ -1384,7 +1742,7 @@ async function findPdf(key) {
 // (Chromium's File System Access API: also writable), or a folder the
 // webserver serves (?gamedata=<folder>, read only)
 const Files = {
-  game: null, dir: null, url: '', after: null,
+  game: null, dir: null, url: '', after: null, written: {},
   has() { return !!(this.game || this.dir || this.url); },
   async handle(path) {
     let d = this.dir;
@@ -1425,6 +1783,7 @@ const Files = {
         if (await this.dir.requestPermission({ mode: 'readwrite' }) === 'granted') {
           const w = await (await this.handle(path)).createWritable();
           await w.write(data); await w.close();
+          this.written[path.toLowerCase()] = Date.now();   // not the game saving (SavePeek)
           return true;
         }
       } catch (e) { log(`Writing ${path}: ${e.message}`); }
@@ -1522,22 +1881,48 @@ async function openPdf(key) {
 
 async function backupSave() {
   if (!Files.has()) { alert('Choose the game folder: the backup takes the saved games from there.'); Files.after = backupSave; pickFolder('game'); return; }
-  const names = [];
+  const entries = [];
   if (Game.id === 3) {   // SAVEGAME\: the directory, each slot's ITEMS_NN.BIN and LVLnn_NN.BIN
-    names.push('SAVEGAME/SAVEGAME.DIR');
+    const names = ['SAVEGAME/SAVEGAME.DIR'];
     for (let s = 0; s <= 12; s++) {
       names.push(`SAVEGAME/ITEMS_${pad2(s)}.BIN`);
       for (let lv = 1; lv <= 14; lv++) names.push(`SAVEGAME/LVL${pad2(lv)}_${pad2(s)}.BIN`);
     }
-  } else names.push('EOBDATA.SAV', ...Array.from({ length: 9 }, (_, i) => `EOBDATA${i + 1}.SAV`));
-  const entries = [];
-  for (const n of names) { const d = await Files.read(n); if (d) entries.push([n.split('/').at(-1), d]); }
-  if (!entries.length) { alert(`No saved games (${Game.id === 3 ? 'SAVEGAME\\' : 'EOBDATA*.SAV'}) in the game folder.`); return; }
-  // like the original: the explored maps go with the saved games (ASE's Explored_NN.dat files)
-  if (Game.id !== 3) for (let lv = 1; lv <= Game.cfg.levels; lv++) { const m = await Store.workOf(lv); if (m.some(v => v)) entries.push([`Explored_${pad2(lv)}.dat`, m]); }
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-  download(zipStore(entries), `EOB${Game.id} saves ${stamp}.zip`);
-  log(`Saved games backed up (${entries.length} files)`);
+    for (const n of names) { const d = await Files.read(n); if (d) entries.push([n.split('/').at(-1), d]); }
+    if (!entries.length) { alert('No saved games (SAVEGAME\\) in the game folder.'); return; }
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+    download(zipStore(entries), `EOB3 saves ${stamp}.zip`);
+    log(`Saved games backed up (${entries.length} files)`);
+    return;
+  }
+  // ASE's: a comment asked for, then LEVELS.TMP, the newest saved game and the explored maps
+  // kept for its slot go into "Save backups\<date> - <time> - <comment>\" - here a zip of that name
+  const comment = prompt('Backup a saved game\n\nEnter a comment for the saved game', `Level ${Game.level}`);
+  if (comment === null) return;
+  const [slot] = await SavePeek.newest();
+  if (!slot) { alert('No saved games (EOBDATA*.SAV) in the game folder.'); return; }
+  for (const n of ['LEVELS.TMP', SavePeek.names()[slot - 1]]) { const d = await Files.read(n); if (d) entries.push([n, d]); }
+  Store.flush();
+  const notes = [];
+  for (let lv = 1; lv <= Game.cfg.levels; lv++) {
+    const m = await DB.get('kv', 'exp:' + Store.skey(slot, lv));
+    if (m) entries.push([`ASE_${slot}/Explored_${pad2(lv)}.dat`, new Uint8Array(m)]);
+    const n = await DB.get('kv', 'notes:' + Store.skey(slot, lv)) || {};
+    for (const b of Object.keys(n).map(Number).sort((a, c) => a - c)) notes.push(`#${lv},${pad2((b & 31) + 1)},${pad2((b >> 5) + 1)}`, n[b]);
+  }
+  if (notes.length) entries.push([`ASE_${slot}/Notes.txt`, new TextEncoder().encode(notes.join('\r\n') + '\r\n')]);
+  const t = new Date(), stamp = `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())} - ${pad2(t.getHours())}.${pad2(t.getMinutes())}`;
+  download(zipStore(entries), `${stamp} - ${comment}.zip`);
+  log(`Saved game of slot ${slot} backed up (${entries.length} files)`);
+}
+// the wizard's "Clear explored maps": the chosen slot's, and so the map's
+async function clearExplored12() {
+  if (!confirm('Really clear explored maps from this save slot?')) return;
+  const slot = Game.cfg.slots === 1 ? 1 : Settings.v.slot;
+  await Store.clearSlot(slot);
+  for (let lv = 1; lv <= Game.cfg.levels; lv++) { Store.exp(lv).fill(0); Store.dirty.add(Store.wkey(lv)); }
+  Store.gen++; Render.draw();
+  log(`Explored maps of save slot ${slot} cleared`);
 }
 
 function download(blob, name) {
@@ -1576,41 +1961,29 @@ function zipStore(entries) {
 const Menu = {
   items() {
     const s = Settings.v, chk = (k, key) => ({ key, checked: s[k], act: () => { s[k] = !s[k]; Settings.save(); Render.draw(); } });
-    const slots = Array.from({ length: Game.cfg?.slots || 6 }, (_, i) => i + 1);
-    const common = [
-      { label: 'Add a note', key: 'A', act: addNote },
-      '-',
-      { label: 'Peek level', key: 'Z', act: peek },
+    const own = { label: 'Open in its own window', act: () => window.open(location.href, 'ase', 'popup,width=900,height=920') };
+    if (Game.id === 3) return [   // ASE3's menu, the page's own items before Quit
+      { label: 'Teleport here', key: 'T', act: teleportHere },
       { label: 'Explore level', key: 'X', act: exploreLevel },
       { label: 'Unexplore level', act: unexploreLevel },
-      { label: 'Teleport here', key: 'T', act: teleportHere },
-      slots.length < 2 ? { label: 'Copy explored from ', disabled: true }   // EOB 1 has one saved game
-        : { label: 'Copy explored from ', sub: slots.map(n => ({ label: `Slot ${n}`,
-          act: () => Store.loadSlot(n).then(() => log(`Explored maps copied from save slot ${n}`)) })) },
-      ...(slots.length < 2 ? [] : [{ label: 'Save game slot', sub: slots.map(n => ({ label: `Slot ${n}`, checked: n === s.slot, act: () => setSlot(n) })) }]),
       '-',
-      { label: 'Map window', sub: [
-        { label: 'Decrease size', key: 'PgDn', act: () => zoomBy(-1) }, { label: 'Increase size', key: 'PgUp', act: () => zoomBy(+1) },
-        { label: 'Fit to window', act: () => { s.zoom = 0; Settings.save(); Render.draw(); } },
-        { label: 'Open in its own window', act: () => window.open(location.href, 'ase', 'popup,width=900,height=920') }] },
-      '-',
-    ];
-    if (Game.id === 3) return [...common,
-      { label: 'Show', sub: [{ label: 'Notes', ...chk('notes', 'N') }] },
-      '-',
-      { label: 'Saved games…', act: () => Saves3.open() },
-      { label: 'Rule book', key: 'R', act: () => openPdf('manual') },
-      { label: 'Clue book', key: 'C', act: () => openPdf('cluebook') },
+      { label: 'Window settings', sub: [
+        { label: 'Increase size', key: 'PgUp', act: () => size3By(+1) }, { label: 'Decrease size', key: 'PgDn', act: () => size3By(-1) },
+        { label: 'Fit to window', act: () => { s.size3 = 0; Settings.save(); Render.draw(); } }, own] },
       '-',
       { label: 'Character editor', key: 'E', act: () => Editor.open() },
       '-',
+      { label: 'Add a note', key: 'A', act: addNote },
+      { label: 'Peek level', key: 'Z', act: peek },
+      { label: 'Show', sub: [{ label: 'Notes', ...chk('notes', 'N') }] },
+      { label: 'Saved games…', act: () => Saves3.open() },
+      { label: 'Rule book', key: 'R', act: () => openPdf('manual') },
+      { label: 'Clue book', key: 'C', act: () => openPdf('cluebook') },
       { label: 'Backup save game', key: 'Ctrl+S', act: backupSave },
       { label: 'Export map', key: 'Ctrl+M', act: exportMap },
       '-',
       { label: 'ASE / ASE3 data folder…', act: () => pickFolder('ase') },
       { label: 'Game folder…', act: () => pickFolder('game') },
-      { label: 'Legend', act: () => Legend.open() },
-      '-',
       { label: 'Debug', sub: [
         { label: 'Debug-mode', key: 'Ctrl+D', checked: s.debug, act: toggleDebug },
         { label: 'Debug log', act: () => LogWin.open() }] },
@@ -1618,7 +1991,26 @@ const Menu = {
       '-',
       { label: 'Quit', key: 'Ctrl+Q', act: quit },
     ];
-    return [...common,
+    const slots = Array.from({ length: Game.cfg?.slots || 6 }, (_, i) => i + 1);
+    // ASE's six slots: greyed out as a whole in EOB 1 (one saved game); in EOB 2 each slot
+    // whose explored maps were never kept (no ASE_<n>\ folder) is
+    const copy = [1, 2, 3, 4, 5, 6].map(n => ({ label: `Slot ${n}`, disabled: Game.id === 2 && !Store.slots.has(n),
+      act: () => Store.loadSlot(n).then(() => log(`Explored maps copied from save slot ${n}`)) }));
+    return [
+      { label: 'Add a note', key: 'A', act: addNote },
+      '-',
+      { label: 'Peek level', key: 'Z', act: peek },
+      { label: 'Explore level', key: 'X', act: exploreLevel },
+      { label: 'Unexplore level', act: unexploreLevel },
+      { label: 'Teleport here', key: 'T', act: teleportHere },
+      { label: 'Copy explored from ', disabled: Game.id === 1, sub: copy },
+      ...(slots.length < 2 ? [] : [{ label: 'Save game slot', sub: slots.map(n => ({ label: `Slot ${n}`, checked: n === s.slot, act: () => setSlot(n) })) }]),
+      { label: 'Clear explored maps', act: clearExplored12 },   // the original's wizard has it
+      '-',
+      { label: 'Map window', sub: [   // ASE's keys: PgUp makes the map smaller
+        { label: 'Decrease size', key: 'PgUp', act: () => zoomBy(-1) }, { label: 'Increase size', key: 'PgDn', act: () => zoomBy(+1) },
+        { label: 'Fit to window', act: () => { s.zoom = 0; Settings.save(); Render.draw(); } }, own] },
+      '-',
       { label: 'Show', sub: [
         { label: 'Buttons', ...chk('buttons', 'B') }, { label: 'Illusionary walls', ...chk('illusionary', 'W') },
         { label: 'Monsters', ...chk('monsters', 'M') }, { label: 'Items', ...chk('items', 'I') },
@@ -1662,7 +2054,7 @@ const Menu = {
       mi.onmouseenter = () => {
         m.querySelectorAll('.mi.open').forEach(o => o.classList.remove('open'));
         document.querySelectorAll('.menu').forEach(o => { if (+o.dataset.level > level) o.remove(); });
-        if (it.sub) { mi.classList.add('open'); const r = mi.getBoundingClientRect(); this.build(it.sub, r.right - 2, r.top - 4, level + 1); }
+        if (it.sub && !it.disabled) { mi.classList.add('open'); const r = mi.getBoundingClientRect(); this.build(it.sub, r.right - 2, r.top - 4, level + 1); }
       };
       if (!it.sub && !it.disabled) mi.onclick = () => { this.hide(); it.act(); };
       m.append(mi);
@@ -1672,7 +2064,10 @@ const Menu = {
     m.style.left = Math.max(0, Math.min(x, innerWidth - r.width - 2)) + 'px';
     m.style.top = Math.max(0, Math.min(y, innerHeight - r.height - 2)) + 'px';
   },
-  show(x, y) { this.hide(); this.build(this.items(), x, y, 0); },
+  show(x, y) {   // like the original's popup, it hides the tooltip
+    clearTimeout(Render.tipTimer); Render.tipTimer = 0; $('#tip').style.display = 'none';
+    this.hide(); this.build(this.items(), x, y, 0);
+  },
   hide() { document.querySelectorAll('.menu').forEach(m => m.remove()); },
 };
 document.addEventListener('mousedown', ev => { if (!ev.target.closest('.menu')) Menu.hide(); });
@@ -1782,18 +2177,18 @@ const LocationChooser = {
 // SAVEGAME\SAVEGAME.DIR names the 12 slots (line n = ITEMS_nn.BIN); the
 // party's x, y, direction and level are bytes 252-255 of ITEMS_nn.BIN
 const Saves3 = {
-  list: null, sel: 0,
+  list: null, sel: 0, picked: 0,
   async load() {
     const dir = await Files.read('SAVEGAME/SAVEGAME.DIR');
     if (!dir) return this.list = null;
-    const names = new TextDecoder('latin1').decode(dir).split('\r\n');
+    const names = new TextDecoder('latin1').decode(dir).split(/\r\n|\r|\n/);
     const list = [];
     for (let slot = 1; slot <= 12; slot++) {
-      const name = (names[slot - 1] || '').replace(/[\x1a\0].*$/s, '').trimEnd();
-      const used = !!name && !/^_+$/.test(name);
-      const f = used ? await Files.get(`SAVEGAME/ITEMS_${pad2(slot)}.BIN`) : null;
-      list.push({ slot, name: used ? name : '', items: f?.data || null, date: f?.date || 0,
-        loc: f && f.data.length >= 256 ? f.data.slice(252, 256) : null });
+      // as ASE3 has it: a slot is used when its ITEMS_NN.BIN holds 256 bytes or more, whatever
+      // SAVEGAME.DIR calls it (unused slots are "_____")
+      const f = await Files.get(`SAVEGAME/ITEMS_${pad2(slot)}.BIN`), used = !!f && f.data.length >= 256;
+      list.push({ slot, used, name: used ? (names[slot - 1] || '').replace(/\0.*$/s, '').trimEnd() : '',
+        items: used ? f.data : null, date: used ? f.date : 0, loc: used ? f.data.slice(252, 256) : null });
     }
     return this.list = list;
   },
@@ -1803,6 +2198,16 @@ const Saves3 = {
     return used[0]?.loc || null;
   },
   refresh() { if (document.getElementById('saves3')) this.open(); },
+  // a click on a saved game, as ASE3's: its party location into the fields below and,
+  // when the slot is used, its explored maps loaded for the map (and the preview)
+  async pick(slot) {
+    this.sel = slot;
+    if (this.list?.[slot - 1]?.loc) {
+      this.picked = slot;
+      if (Game.cfg && Game.id === 3) await Store.loadSlot(slot);
+    }
+    this.open();
+  },
   async open() {
     const d = Dlg.make('saves3', 'EOB 3 saved games', 980), body = d.querySelector('.body');
     if (!Files.has()) {
@@ -1812,15 +2217,15 @@ const Saves3 = {
     }
     const list = await this.load();
     if (!list) { body.replaceChildren(el('p', { textContent: 'No SAVEGAME\\SAVEGAME.DIR in the game folder.' })); return; }
-    if (!this.sel) this.sel = [...list].filter(s => s.loc).sort((a, b) => b.date - a.date)[0]?.slot || 1;
+    if (!this.sel) this.sel = Store.loadedSlot || [...list].filter(s => s.loc).sort((a, b) => b.date - a.date)[0]?.slot || 1;
     const fmtDate = ms => { if (!ms) return ''; const t = new Date(ms); return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}  ${pad2(t.getHours())}:${pad2(t.getMinutes())}`; };
     const rows = el('table', { className: 'list', style: 'font-family:Consolas,monospace' });
     for (const s of list) {
-      const lv = s.loc ? `${pad2(s.loc[3])}: ${LEVEL_NAMES[3][s.loc[3] - 1] || ''}` : '';
-      rows.append(el('tr', { className: s.slot === this.sel ? 'sel' : '', style: 'cursor:pointer',
-        onclick: () => { this.sel = s.slot; this.open(); }, ondblclick: () => setSlot(s.slot).then(() => this.open()) },
-        el('td', { textContent: pad2(s.slot) }), el('td', { textContent: s.name }),
-        el('td', { textContent: lv }), el('td', { textContent: s.name ? fmtDate(s.date) : '' })));
+      const n = s.used && s.loc[3] >= 1 && s.loc[3] <= 14 ? s.loc[3] : 0;   // ASE3: level 00 without a name outside 1-14
+      rows.append(el('tr', { className: s.slot === this.sel ? 'sel' : '', style: 'cursor:pointer', onclick: () => this.pick(s.slot) },
+        el('td', { textContent: s.used ? pad2(s.slot) : '' }), el('td', { textContent: s.name }),   // unused: an empty line
+        el('td', { textContent: s.used ? `${pad2(n)}: ${n ? LEVEL_NAMES[3][n - 1] : ''}` : '' }),
+        el('td', { textContent: s.used ? fmtDate(s.date) : '' })));
     }
     const s = list[this.sel - 1];
     const full = el('input', { type: 'checkbox', checked: !!Settings.v.previewFull });
@@ -1831,7 +2236,7 @@ const Saves3 = {
     if (s.loc) { level.value = s.loc[3]; xIn.value = s.loc[0] + 1; yIn.value = s.loc[1] + 1; }
     const draw = () => this.preview(cv, s, +level.value, +xIn.value - 1, +yIn.value - 1, full.checked);
     full.onchange = () => { Settings.v.previewFull = full.checked; Settings.save(); draw(); };
-    level.onchange = xIn.oninput = yIn.oninput = draw;
+    level.onchange = draw;   // ASE3 redraws for a level and a click on the map, not for typed coordinates
     cv.onmousedown = ev => {
       const r = cv.getBoundingClientRect(), cs = cv.width / 32;
       xIn.value = Math.floor((ev.clientX - r.left) / cs) + 1; yIn.value = Math.floor((ev.clientY - r.top) / cs) + 1; draw();
@@ -1845,8 +2250,9 @@ const Saves3 = {
         log(`Save slot ${s.slot}: party set to level ${lv} at ${pad2(x + 1)},${pad2(y + 1)}`);
       this.open();
     } });
-    const slotNote = el('span', { className: 'muted', textContent: `Explored maps are kept per save slot; the map shows slot ${Settings.v.slot}` +
-      ' (double-click a saved game to use its slot).' });
+    const slotNote = el('span', { className: 'muted', textContent: 'Explored maps are kept per save slot: a click on a saved game loads ' +
+      'its explored maps, and when the game saves they go to the slot it saved in' +
+      (Store.loadedSlot ? ` (the map shows slot ${Store.loadedSlot}'s).` : '.') });
     body.replaceChildren(el('div', { className: 'cols' },
       el('div', { style: 'flex:1;min-width:420px' },
         el('fieldset', {}, el('legend', { textContent: ' Saved games ' }), rows),
@@ -1862,41 +2268,32 @@ const Saves3 = {
           el('div', { style: 'display:flex;gap:6px;align-items:center' }, level, xIn, yIn, apply)))));
     draw();
   },
+  // ASE3's preview: its map drawing on 480 x 480 pixels, the level's map from ASE3's
+  // Maps\NN.dat (the game's own when there is none), the party where the fields say,
+  // facing the save's way
   async preview(cv, s, level, px, py, full) {
-    const g = cv.getContext('2d'), cs = cv.width / 32;
+    const g = cv.getContext('2d');
     g.fillStyle = COLORS.rock3; g.fillRect(0, 0, cv.width, cv.height);
-    // the live map when the game is on that level, else ASE3's map of it
-    const m = Game.id === 3 && Game.map && Game.level === level ? Game.map : await Maps3.get(level);
+    const m = await Maps3.get(level) || (Game.id === 3 && Game.map && Game.level === level ? Game.map : null);
     if (!m) {
       g.fillStyle = '#2b2010'; g.font = '14px Tahoma'; g.textAlign = 'center';
       g.fillText('No map of this level: import ASE3\'s folder (menu: ASE / ASE3 data folder)', cv.width / 2, cv.height / 2);
       return;
     }
+    // the slot's explored maps as they are kept for it (ASE3's Explored_NN.dat)
     const exp = full ? null : new Uint8Array(await DB.get('kv', `exp:3:${s.slot}:${level}`) || new ArrayBuffer(1024));
-    const live = s.slot === (SavePeek.slot || Settings.v.slot) ? Store.work[`3:work:${level}`] : null;   // the working set goes to this slot
-    const open = b => m[b] === 0xFF && (full || exp[b] || live?.[b]);
-    g.fillStyle = COLORS.floor3;
-    for (let b = 0; b < 1024; b++) if (open(b)) g.fillRect((b & 31) * cs, (b >> 5) * cs, cs, cs);
-    g.fillStyle = COLORS.wall3;
-    for (let b = 0; b < 1024; b++) {
-      if (!open(b)) continue;
-      const x = b & 31, y = b >> 5, X = x * cs, Y = y * cs;
-      if (y > 0 && m[b - 32] !== 0xFF) g.fillRect(X - 1, Y - 1, cs + 2, 3);
-      if (x < 31 && m[b + 1] !== 0xFF) g.fillRect(X + cs - 1, Y - 1, 3, cs + 2);
-      if (y < 31 && m[b + 32] !== 0xFF) g.fillRect(X - 1, Y + cs - 1, cs + 2, 3);
-      if (x > 0 && m[b - 1] !== 0xFF) g.fillRect(X - 1, Y - 1, 3, cs + 2);
-    }
-    if (px >= 0 && py >= 0 && px < 32 && py < 32) {
-      g.fillStyle = COLORS.party3; g.beginPath(); g.arc(px * cs + cs / 2, py * cs + cs / 2, cs * 0.35, 0, 7); g.fill();
-      g.strokeStyle = COLORS.party3edge; g.lineWidth = 1; g.stroke();
-    }
+    const party = s.used && px >= 0 && py >= 0 && px < 32 && py < 32 ? { x: px, y: py, dir: s.loc[2] } : null;
+    Render.map3(g, cv.width >> 5, m, b => m[b] === 0xFF && (full || !!exp[b]), party, null, null);
   },
+  // ASE3 empties the explored maps it has loaded, writes them to the slot and loads the slot again
   async clearExplored(slot) {
     if (!confirm('Really clear explored maps from this save slot?')) return;
+    if (!this.list?.[slot - 1]?.used) return;
     await Store.clearSlot(slot);
-    if (slot === (SavePeek.slot || Settings.v.slot)) for (let lv = 1; lv <= 14; lv++) { Store.exp(lv).fill(0); Store.dirty.add(Store.wkey(lv)); }
-    Store.gen++; Render.draw(); this.open();
+    if (Game.id === 3 && Store.loadedSlot === slot) for (let lv = 1; lv <= 14; lv++) { Store.exp(lv).fill(0); Store.dirty.add(Store.wkey(lv)); }
+    Store.gen++; Render.draw();
     log(`Explored maps of save slot ${slot} cleared`);
+    await this.pick(slot);
   },
 };
 
@@ -1962,35 +2359,41 @@ const Editor = {
     if (!d) return;
     const body = d.querySelector('.body'), party = Game.party(), cfg = Game.cfg, F = cfg.f;
     if (!party.some(p => p.slot === this.cur)) this.cur = party[0]?.slot ?? 0;
+    // ASE's six character buttons: the names, the empty places greyed out
     const chars = el('div', { className: 'chars' });
-    for (const p of party) chars.append(el('button', { className: p.slot === this.cur ? 'sel' : '', textContent: p.name,
-      onclick: () => { this.cur = p.slot; this.render(); } }));
+    for (let k = 0; k < 6; k++) {
+      const p = party.find(q => q.slot === k);
+      chars.append(el('button', { className: k === this.cur ? 'sel' : '', textContent: p ? p.name : '', disabled: !p,
+        onclick: () => { this.cur = k; this.render(); } }));
+    }
     chars.append(el('button', { textContent: 'Refresh', onclick: () => this.render(), style: 'margin-top:8px' }));
     const r = this.rec(), base = this.base(), pending = {};
     const rd = (off, size) => size === 1 ? r[off] : size === 2 ? r[off] | r[off + 1] << 8 : (r[off] | r[off + 1] << 8 | r[off + 2] << 16 | r[off + 3] << 24) >>> 0;
-    const num = (label, off, size = 1, max = 255) => {
-      const inp = el('input', { type: 'number', min: 0, max, value: rd(off, size) });
+    // the fields as ASE has them (their names are ASE's fields' too); armour class and levels shown only
+    const num = (name, off, size = 1, max = 255, edit = true) => {
+      const inp = el('input', { type: 'number', name, min: 0, max, value: rd(off, size), disabled: !edit, style: 'width:64px' });
       inp.onchange = () => { pending[off] = [size, Math.max(0, Math.min(max, +inp.value || 0))]; };
-      return el('label', {}, el('span', { textContent: label }), inp);
+      return inp;
     };
-    const show = (label, text) => el('label', {}, el('span', { textContent: label }), el('span', { className: 'muted', textContent: text }));
-    const pick = (label, off, opts) => {
-      const sel = el('select');
+    const row = (label, ...inputs) => el('label', {}, el('span', { textContent: label }), ...inputs);
+    const pick = (label, name, off, opts) => {
+      const sel = el('select', { name });
       opts.forEach((n, i) => sel.append(el('option', { value: i, textContent: n, selected: r[off] === i })));
       sel.onchange = () => { pending[off] = [1, +sel.value]; };
-      return el('label', {}, el('span', { textContent: label }), sel);
+      return row(label, sel);
     };
     const hpMax = F.hpSize > 1 ? 65535 : 127;   // ASE caps EOB 1 hit points at 127
-    const stats = el('div', {}, el('div', { className: 'muted', textContent: 'Statistics (current / normal)' }));
-    for (const [n, off] of [['Strength', 0x0D], ['Exceptional strength', 0x0F], ['Intelligence', 0x11], ['Wisdom', 0x13],
-      ['Dexterity', 0x15], ['Constitution', 0x17], ['Charisma', 0x19]])
-      stats.append(el('div', { style: 'display:flex;gap:6px' }, num(n, off), num('', off + 1)));
-    stats.append(num('Hit points', F.hp, F.hpSize, hpMax), num('Max hit points', F.hpMax, F.hpSize, hpMax), num('Armor class', F.ac),
-      pick('Race / sex', F.race, RACES.flatMap(rc => [rc + ' male', rc + ' female'])), pick('Class', F.cls, CLASSES12),
-      pick('Alignment', F.align, ALIGN), num('Food', F.food),
-      show('Levels', `${r[F.level]} / ${r[F.level + 1]} / ${r[F.level + 2]}`),
-      num('Experience 1', F.xp, 4, 0xFFFFFFFF), num('Experience 2', F.xp + 4, 4, 0xFFFFFFFF), num('Experience 3', F.xp + 8, 4, 0xFFFFFFFF));
-    stats.append(el('button', { textContent: 'Save changes', style: 'margin-top:6px', onclick: async () => {
+    const stats = el('div', {});
+    for (const [n, name, off] of [['Strength', 'STR', 0x0D], ['Str 18/**', 'STR%', 0x0F], ['Intelligence', 'INT', 0x11],
+      ['Wisdom', 'WIS', 0x13], ['Dexterity', 'DEX', 0x15], ['Constitution', 'CON', 0x17], ['Charisma', 'CHA', 0x19]])
+      stats.append(row(n, num(name, off), num(name + ' max', off + 1)));
+    stats.append(row('Armor class', num('AC', F.ac, 1, 255, false)), row('Food level', num('food', F.food)),
+      row('Hit points', num('HP', F.hp, F.hpSize, hpMax), num('HP max', F.hpMax, F.hpSize, hpMax)),
+      pick('Race', 'race', F.race, RACES.flatMap(rc => [rc + ' male', rc + ' female'])), pick('Alignment', 'alignment', F.align, ALIGN),
+      pick('Class', 'class', F.cls, CLASSES12),
+      ...[0, 1, 2].map(i => row(i ? '' : 'Level / XP', num(`level ${i + 1}`, F.level + i, 1, 255, false),
+        num(`XP ${i + 1}`, F.xp + 4 * i, 4, 0xFFFFFFFF))));
+    stats.append(el('button', { textContent: 'Save changes to character', style: 'margin-top:6px', onclick: async () => {
       for (const [off, [size, v]] of Object.entries(pending)) {
         const bytes = size === 1 ? [v] : size === 2 ? [v & 255, v >> 8] : [v & 255, v >> 8 & 255, v >> 16 & 255, v >>> 24];
         await Api.write(base + +off, Uint8Array.from(bytes));
@@ -1998,49 +2401,55 @@ const Editor = {
       log(`${party.find(p => p.slot === this.cur)?.name}: ${Object.keys(pending).length} values saved`);
       await Game.poll(); this.render();
     } }));
-    // the spells as ASE lists them: level, name, memorized count (- = unknown)
+    // the spells as ASE lists them (Lvl, Spell, M): a mage spell's level as "1", a prayer's as
+    // "1: " ("   " below it), the memorized count, nothing for an unknown spell
     const counts = this.spellCounts(r, this.kind), list = SPELLS[Game.id][this.kind];
     const kindSel = el('div', { style: 'display:flex;gap:12px;margin-bottom:4px' });
-    for (const [k, label] of [['mage', 'Mage'], ['cleric', 'Cleric']])
+    for (const [k, label] of [['mage', 'Spells'], ['cleric', 'Prayers']])
       kindSel.append(el('label', { style: 'display:inline-flex;gap:4px' }, el('input', { type: 'radio', name: 'spellkind', checked: this.kind === k,
         onchange: () => { this.kind = k; this.spell = -1; this.render(); } }), label));
-    const st = el('table', { className: 'list' });
+    const st = el('table', { className: 'list spells' }, el('tr', {}, ...['Lvl', 'Spell', 'M'].map(t => el('th', { textContent: t }))));
     let lastLv = 0;
     list.forEach(([name, lv], i) => {
+      const lvText = lv !== lastLv ? (this.kind === 'mage' ? `${lv}` : `${lv}: `) : this.kind === 'mage' ? '' : '   ';
       st.append(el('tr', { className: i === this.spell ? 'sel' : '', style: 'cursor:pointer', onclick: () => { this.spell = i; this.render(); } },
-        el('td', { textContent: lv !== lastLv ? `${lv}:` : '' }), el('td', { textContent: name }),
-        el('td', { className: 'n', textContent: counts[i] < 0 ? '-' : String(counts[i]) })));
+        el('td', { textContent: lvText }), el('td', { textContent: name }),
+        el('td', { className: 'n', textContent: counts[i] < 0 ? '' : String(counts[i]) })));
       lastLv = lv;
     });
-    const spells = el('div', {}, el('div', { className: 'muted', textContent: 'Spells (memorized, - = unknown)' }), kindSel,
-      el('div', { style: 'max-height:380px;overflow:auto' }, st),
-      el('div', { style: 'display:flex;gap:6px;margin-top:4px' }, el('button', { textContent: 'Learn', onclick: () => this.learn(1) }),
-        el('button', { textContent: 'Unlearn', onclick: () => this.learn(-1) })));
-    // the inventory in ASE's slot order, set from the item list (ASE's Item_List.txt when there is one)
-    const inv = el('div', {}, el('div', { className: 'muted', textContent: 'Inventory' }));
-    const it = el('table', { className: 'list', style: 'font-family:Consolas,monospace' });
+    const spells = el('div', {}, kindSel, el('div', { style: 'max-height:380px;overflow:auto' }, st),
+      el('div', { style: 'display:flex;gap:6px;margin-top:4px;justify-content:flex-end' },
+        el('button', { textContent: '-', title: 'Unlearn', onclick: () => this.learn(-1) }),
+        el('button', { textContent: '+', title: 'Learn', onclick: () => this.learn(1) })));
+    // the inventory in ASE's slot order (Slot, Item), set from the item list
+    const inv = el('div', {});
+    const it = el('table', { className: 'list inventory' }, el('tr', {}, el('th', { textContent: 'Slot' }), el('th', { textContent: 'Item' })));
     SLOTS12.forEach(([name, rel], k) => {
       const off = F.inv + rel, idx = r[off] | r[off + 1] << 8;
-      it.append(el('tr', { className: k === this.slot ? 'sel' : '', style: 'cursor:pointer', onclick: () => { this.slot = k; this.render(); },
-        ondblclick: () => { const v = prompt('Item number (decimal)', String(idx)); if (v !== null && /^\d+$/.test(v.trim())) { this.slot = k; this.setItem(+v); } } },
-        el('td', { textContent: name }), el('td', { className: 'n', textContent: hex(idx) }), el('td', { textContent: idx ? Game.itemName(Game.item(idx)) : '' })));
+      it.append(el('tr', { className: k === this.slot ? 'sel' : '', style: 'cursor:pointer', onclick: () => { this.slot = k; this.render(); } },
+        el('td', { textContent: name }), el('td', { textContent: idx ? Game.itemName(Game.item(idx)) : '' })));
     });
     const names = AseData.items[Game.id]?.list?.length ? AseData.items[Game.id].list : null;
     const filter = el('input', { type: 'text', placeholder: 'Filter', value: this.filter, style: 'width:130px' });
     const sel = el('select', { size: 16, style: 'width:100%;font-family:Consolas,monospace' });
+    // ASE's item list: "%4.4x. name" for every line of its Item_List.txt, the filter on the names
     const fillList = () => {
       sel.replaceChildren();
       const f = filter.value.toUpperCase();
-      for (let i = 0; i < cfg.items; i++) {
-        const line = `${hex(i)}. ${names ? names[i] ?? '' : Game.itemName(Game.item(i))}`;
-        if (!f || line.toUpperCase().includes(f)) sel.append(el('option', { value: i, textContent: line }));
+      for (let i = 0, n = names ? names.length : cfg.items; i < n; i++) {
+        const name = names ? names[i] ?? '' : Game.itemName(Game.item(i));
+        if (!f || name.toUpperCase().includes(f)) sel.append(el('option', { value: i, textContent: `${hex(i)}. ${name}` }));
+      }
+      if (this.slot >= 0) {   // a slot's item is selected in the list, as a click on the slot does in ASE
+        const o = F.inv + SLOTS12[this.slot][1];
+        sel.value = String(r[o] | r[o + 1] << 8);
       }
     };
     filter.oninput = () => { this.filter = filter.value; fillList(); };
     fillList();
     inv.append(el('div', { style: 'display:flex;gap:10px;align-items:flex-start' }, el('div', { style: 'max-height:430px;overflow:auto' }, it),
       el('div', { style: 'width:310px' }, sel, el('div', { style: 'display:flex;gap:6px;margin-top:4px' },
-        el('button', { textContent: 'Set', onclick: () => { if (this.slot < 0 || sel.value === '') { alert('Select a slot and an item.'); return; } this.setItem(+sel.value); } }),
+        el('button', { textContent: 'Set item', onclick: () => { if (this.slot >= 0 && sel.value !== '') this.setItem(+sel.value); } }),
         filter))));
     body.replaceChildren(el('div', { className: 'ed' }, chars, el('div', { className: 'cols' }, stats, spells, inv)));
   },
@@ -2064,7 +2473,7 @@ const RACES3 = [...RACES, 'Sprite', 'Saurial'].flatMap(r => [r + ' male', r + ' 
 const MAGE3 = [
   ['Armor', 'Burning Hands', 'Detect Magic', 'Magic Missile', 'Shield', 'Shocking Grasp'],
   ['Blur', 'Detect Invisibility', 'Improved Invisibility', 'Invisibility', 'Protection from Paralysis', "Melf's Acid Arrow"],
-  ['Dispel Magic', 'Fireball', 'Haste', 'Hold Person', 'Hold Undead', "Invisibility, 10'", 'Lightning Bolt', 'Slow',
+  ['Dispel Magic', 'Firebal', 'Haste', 'Hold Person', 'Hold Undead', "Invisibility, 10'", 'Lightning Bolt', 'Slow',   // sic, ASE3's
     'Vampiric Touch', 'Water Breathing'],
   ['Fear', 'Ice Storm', 'Improved Invisibility', 'Remove Curse'],
   ['Cone of Cold', 'Hold Monster', 'Wall of Force'],
@@ -2131,11 +2540,10 @@ const Editor3 = {
   async openFile(slot) {
     const data = await Files.read(`SAVEGAME/ITEMS_${pad2(slot)}.BIN`);
     if (!data) { alert(`SAVEGAME\\ITEMS_${pad2(slot)}.BIN can't be read.`); return; }
-    const party = this.partyIds(data, 252), recs = [];
+    const recs = [];   // ASE3 lists all ten records of a saved game, the party or not
     for (let k = 0; k < C3.records; k++) {
       const at = C3.fileFirst + k * C3.fileStride;
       if (at + C3.to > data.length || !charOk3(data, at)) continue;
-      if (party.length && !party.includes(k)) continue;
       recs.push({ index: k, at, data: data.slice(at + C3.from, at + C3.to) });
     }
     if (!recs.length) { alert('No characters in that saved game.'); return; }
@@ -2220,9 +2628,8 @@ const Editor3 = {
     };
     const pair = (...kids) => el('div', { style: 'display:flex;gap:6px' }, ...kids);
     const stats = el('fieldset', {}, el('legend', { textContent: ' Stats ' }),
-      pick('Race', C3.race, RACES3), pick('Class', C3.cls, CLASSES), pick('Alignment', C3.align, ALIGN),
+      pick('Race', C3.race, RACES3), pick('Class', C3.cls, [...CLASSES12, '']), pick('Alignment', C3.align, ALIGN),   // ASE3's names
       num('Portrait', C3.portrait),
-      ...(kind === 'file' ? [el('label', {}, el('span', { textContent: 'Ammunition count' }), el('span', { className: 'muted', textContent: String(rec3.get(rd, -2, 2)) }))] : []),
       pair(num('Hit points', C3.hp, 2, true, -32768, 32767), num('/', C3.hpMax, 2, false, 0, 65535)),
       num('Food level', C3.food, 1, false, 0, 100), pair(num('STR', C3.str), num('18/**', C3.strExt, 1, false, 0, 100)),
       num('INT', C3.str + 2), num('WIS', C3.str + 3), num('DEX', C3.str + 4), num('CON', C3.str + 5), num('CHA', C3.str + 6),
@@ -2237,28 +2644,36 @@ const Editor3 = {
         const setSpell = nv => { rec3.set(rd, off, nv); rec3.set(rd, off - 200, nv === 0xFF ? 0 : nv); };
         const inp = el('input', { type: 'text', value: v === 0xFF ? '-' : v, style: 'width:38px;text-align:right' });
         inp.onchange = () => { const s = inp.value.trim(); setSpell(s === '-' || s === '' ? 0xFF : Math.max(0, Math.min(254, +s || 0))); };
-        const step = dv => () => { const cur = rec3.get(rd, off); const nv = cur === 0xFF ? (dv > 0 ? 0 : 0xFF) : cur + dv < 0 ? 0xFF : Math.min(254, cur + dv);
-          setSpell(nv); inp.value = nv === 0xFF ? '-' : nv; };
+        // ASE3's + and -: FF ("-") and one more is 0, 0 and one less is FF, written at once
+        const step = dv => async () => {
+          const cur = rec3.get(rd, off);
+          if (cur === 0xFF && dv < 0) return;
+          const nv = cur + dv < 0 ? 0xFF : cur + dv > 0xFF ? 0 : cur + dv;
+          setSpell(nv); inp.value = nv === 0xFF ? '-' : nv;
+          await this.now(r, [off - 200, off]);
+        };
         t.append(el('tr', {}, el('td', { textContent: i ? '' : String(li + 1) }), el('td', { textContent: n }), el('td', {}, inp),
           el('td', {}, el('button', { textContent: '+', onclick: step(1) }), el('button', { textContent: '-', onclick: step(-1) }))));
       }));
       return el('fieldset', {}, el('legend', { textContent: ` ${title} ` }), el('div', { style: 'max-height:330px;overflow:auto' }, t));
     };
-    // equipment
+    // equipment: ASE3 shows and sets it in a saved game only (its memory editor reads no equipment);
+    // a slot changes at once, like a spell
     let slotSel = -1;
     const eq = el('table', { className: 'list', style: 'font-family:Consolas,monospace' });
-    const eqRows = SLOTS3.map(([name, k], i) => {
+    const setSlot = async (k, v) => { const o = C3.slots + 2 * k; rec3.set(rd, o, v, 2); fill(); await this.now(r, [o, o + 1]); };
+    const eqRows = kind === 'mem' ? [] : SLOTS3.map(([name, k], i) => {
       const tr = el('tr', { style: 'cursor:pointer', onclick: () => { slotSel = i; eqRows.forEach((x, j) => x.classList.toggle('sel', j === i)); } });
       tr.ondblclick = () => {
         const v = prompt('Enter item number (decimal)', '');
-        if (v !== null && /^\d+$/.test(v.trim())) { rec3.set(rd, C3.slots + 2 * k, +v, 2); fill(); }
+        if (v !== null && /^\d+$/.test(v.trim())) setSlot(k, +v);
       };
       eq.append(tr);
       return tr;
     });
-    const fill = () => SLOTS3.forEach(([name, k], i) => {
-      const v = rec3.get(rd, C3.slots + 2 * k, 2);
-      eqRows[i].replaceChildren(el('td', { textContent: name }), el('td', { className: 'n', textContent: v === 0xFFFF ? '-' : String(v).padStart(4, '0') }),
+    const fill = () => eqRows.forEach((tr, i) => {
+      const v = rec3.get(rd, C3.slots + 2 * SLOTS3[i][1], 2);
+      tr.replaceChildren(el('td', { textContent: SLOTS3[i][0] }), el('td', { className: 'n', textContent: v === 0xFFFF ? '-' : String(v).padStart(4, '0') }),
         el('td', { textContent: v === 0xFFFF ? '-' : items.get(v) || '?' }));
     });
     fill();
@@ -2269,13 +2684,11 @@ const Editor3 = {
         list.append(el('option', { value: n, textContent: `${String(n).padStart(4, '0')}  ${name}` }));
     };
     filter.oninput = fillList; fillList();
-    const setItem = () => {
-      if (slotSel < 0 || !list.value) { alert('Select an equipment slot and an item.'); return; }
-      rec3.set(rd, C3.slots + 2 * SLOTS3[slotSel][1], +list.value, 2); fill();
-    };
-    const clearItem = () => { if (slotSel >= 0) { rec3.set(rd, C3.slots + 2 * SLOTS3[slotSel][1], 0xFFFF, 2); fill(); } };
+    const setItem = () => { if (slotSel >= 0 && list.value) setSlot(SLOTS3[slotSel][1], +list.value); };
+    const clearItem = () => { if (slotSel >= 0) setSlot(SLOTS3[slotSel][1], 0xFFFF); };
     const equip = el('fieldset', {}, el('legend', { textContent: ' Equipment ' }), el('div', { style: 'display:flex;gap:10px' },
-      el('div', { style: 'max-height:430px;overflow:auto' }, eq),
+      el('div', { style: 'max-height:430px;overflow:auto' }, kind === 'mem'
+        ? el('p', { className: 'muted', style: 'width:300px', textContent: 'The equipment is edited in a saved game (Saved games…), as in ASE3.' }) : eq),
       el('div', { style: 'width:330px' }, items.size ? list : el('p', { className: 'muted',
         textContent: "No item names: import ASE3's folder (menu: ASE / ASE3 data folder) for its Items.txt. Double-click a slot to enter an item number." }),
         el('div', { style: 'display:flex;gap:6px;margin-top:4px' }, el('button', { textContent: 'Set item', onclick: setItem }),
@@ -2285,6 +2698,20 @@ const Editor3 = {
         el('div', { className: 'cols' }, spellBox('Mage spells', MAGE3, C3.mage), spellBox('Cleric spells', CLERIC3, C3.cleric)),
         el('p', { className: 'muted', textContent: 'Changes are kept per character until "Apply changes". Some items may crash the game; ' +
           'back up your saves before editing.' }))));
+  },
+  // what ASE3 writes at once (a spell, an equipment slot): into memory, or into the saved
+  // game when its folder can be written; otherwise it goes with "Apply changes" (a download)
+  async now(r, offs) {
+    if (this.src.kind === 'mem') {
+      for (const off of offs) {
+        const i = off - C3.from;
+        await Api.write(r.at + off, r.data.subarray(i, i + 1));
+        r.orig[i] = r.data[i];
+      }
+      return;
+    }
+    for (const off of offs) this.src.file[r.at + off] = r.data[off - C3.from];
+    if (Files.dir) await Files.write(`SAVEGAME/ITEMS_${pad2(this.src.slot)}.BIN`, this.src.file);
   },
   async apply() {
     const { kind, recs } = this.src;
