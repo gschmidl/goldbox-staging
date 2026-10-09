@@ -32,7 +32,7 @@ input[type=number] { width: 70px; }
   text-align: center; color: #bbb; }
 #msg h2 { font-weight: normal; color: #eee; }
 .menu { position: fixed; background: var(--menu); border: 1px solid #555; min-width: 230px; padding: 3px 0;
-  z-index: 50; box-shadow: 3px 3px 10px #000c; user-select: none; }
+  z-index: 50; box-shadow: 3px 3px 10px #000c; user-select: none; overflow-y: auto; }
 .menu .mi { padding: 3px 22px 3px 24px; position: relative; display: flex; justify-content: space-between;
   gap: 24px; cursor: default; white-space: nowrap; }
 .menu .mi:hover, .menu .mi.open { background: var(--sel); }
@@ -1875,27 +1875,34 @@ const Menu = {
       '-', { label: 'Quit', key: 'Ctrl+Q', act: quit },
     ];
   },
-  build(items, x, y, parent) {
+  // a submenu opens when its item is clicked (a second click closes it), not when the mouse
+  // passes over it; it goes beside the menu it comes from, on the right where it fits, else
+  // on the left, so that it never covers that menu's items; a menu taller than the window
+  // scrolls
+  build(items, x, y, parent, from) {
     const m = el('div', { className: 'menu' });
     for (const it of items) {
       if (it === '-') { m.append(el('div', { className: 'sep' })); continue; }
       const mi = el('div', { className: 'mi' + (it.checked ? ' chk' : '') + (it.sub ? ' sub' : '') + (it.disabled ? ' dis' : '') },
         el('span', { textContent: it.label }), el('span', { className: 'k', textContent: it.key || '' }));
-      if (it.sub) mi.onmouseenter = () => {
+      if (it.sub && !it.disabled) mi.onclick = () => {
+        const was = mi.classList.contains('open');
         m.querySelectorAll('.mi.open').forEach(o => o.classList.remove('open'));
-        m.querySelectorAll(':scope ~ .menu').forEach(o => o.remove());
         this.closeFrom(m);
-        mi.classList.add('open');
-        const r = mi.getBoundingClientRect();
-        this.build(it.sub, r.right - 2, r.top - 4, m);
+        if (!was) { mi.classList.add('open'); this.build(it.sub, 0, 0, m, mi); }
       };
-      else mi.onmouseenter = () => { m.querySelectorAll('.mi.open').forEach(o => o.classList.remove('open')); this.closeFrom(m); };
-      if (!it.sub && !it.disabled) mi.onclick = () => { this.hide(); it.act(); };
+      else if (!it.sub && !it.disabled) mi.onclick = () => { this.hide(); it.act(); };
       m.append(mi);
     }
     document.body.append(m);
     m.dataset.level = parent ? +parent.dataset.level + 1 : 0;
+    m.style.maxHeight = innerHeight - 4 + 'px';
     const r = m.getBoundingClientRect();
+    if (from) {
+      const p = parent.getBoundingClientRect(), right = innerWidth - p.right, left = p.left;
+      x = r.width + 2 <= right || right >= left ? p.right - 2 : p.left - r.width + 2;
+      y = from.getBoundingClientRect().top - 4;
+    }
     m.style.left = Math.max(0, Math.min(x, innerWidth - r.width - 2)) + 'px';
     m.style.top = Math.max(0, Math.min(y, innerHeight - r.height - 2)) + 'px';
     return m;

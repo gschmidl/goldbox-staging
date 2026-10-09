@@ -603,6 +603,15 @@ class Original(Common):
         """Each control's text (or entries, checks), and whether it is enabled."""
         return self.t.control_values(self.edc)
 
+    def editor_close(self):
+        """The editor's window closed (its title bar's X)."""
+        original.user32.PostMessageW(self.ed, original.WM_CLOSE, 0, 0)
+        for _ in range(30):
+            if not original.user32.IsWindowVisible(self.ed):
+                break
+            time.sleep(0.1)
+        time.sleep(0.5)
+
     def editor_view(self, name):
         """One of the editor's pictures (the form paints them)."""
         x, y, w, h = EDITOR_PAINT[name]
@@ -962,6 +971,10 @@ class Page(Common):
 
     def editor_values(self):
         return self.b.js('Editor.values()')
+
+    def editor_close(self):
+        self.b.js("document.querySelector('#editor header button').click(); 1")
+        time.sleep(0.5)
 
     def editor_view(self, name):
         return self.b.canvas(f'#ed_{name}')
@@ -1428,6 +1441,17 @@ def editor_view(s):
         s.observe(f'member {i} icon', s.editor_view('Icon_PaintBox'))
 
 
+def editor_reopen(s):
+    """The editor closed and opened again: its list of characters and the one it shows."""
+    begin(s)
+    s.editor()
+    s.editor_pick('Characters_Listbox', 1)
+    s.editor_close()
+    s.editor()
+    time.sleep(1.0)
+    editor_look(s, 'again', ['Characters_Listbox', 'Age_Edit', 'Experience_Edit'], lists=True)
+
+
 def editor_spells(s):
     """The editor's spell lists of every class for every member; then on the first member +
     and - on the first spells (learnt, memorized, forgotten), Learn all and Clear (Yes), and
@@ -1730,6 +1754,7 @@ SESSIONS = {
     'event_number': event_number,
     'hud_settings': hud_settings,
     'editor_view': editor_view,
+    'editor_reopen': editor_reopen,
     'editor_spells': editor_spells,
     'editor_changes': editor_changes,
     'editor_items': editor_items,

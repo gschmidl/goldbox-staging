@@ -30,7 +30,7 @@ input[type=number] { width: 70px; }
   text-align: center; color: #2b2010; }
 #msg h2 { font-weight: normal; }
 .menu { position: fixed; background: var(--menu); border: 1px solid #555; min-width: 230px; padding: 3px 0;
-  z-index: 50; box-shadow: 3px 3px 10px #000c; user-select: none; }
+  z-index: 50; box-shadow: 3px 3px 10px #000c; user-select: none; overflow-y: auto; }
 .menu .mi { padding: 3px 22px 3px 24px; position: relative; display: flex; justify-content: space-between;
   gap: 24px; cursor: default; white-space: nowrap; }
 .menu .mi:hover, .menu .mi.open { background: var(--sel); }
@@ -2044,23 +2044,34 @@ const Menu = {
       { label: 'Quit', key: 'Ctrl+Q', act: quit },
     ];
   },
-  build(items, x, y, level) {
+  // a submenu opens when its item is clicked (a second click closes it), not when the mouse
+  // passes over it; it goes beside the menu it comes from, on the right where it fits, else
+  // on the left, so that it never covers that menu's items; a menu taller than the window
+  // scrolls
+  build(items, x, y, level, from) {
     const m = el('div', { className: 'menu' });
     m.dataset.level = level;
     for (const it of items) {
       if (it === '-') { m.append(el('div', { className: 'sep' })); continue; }
       const mi = el('div', { className: 'mi' + (it.checked ? ' chk' : '') + (it.sub ? ' sub' : '') + (it.disabled ? ' dis' : '') },
         el('span', { textContent: it.label }), el('span', { className: 'k', textContent: it.key || '' }));
-      mi.onmouseenter = () => {
+      if (it.sub && !it.disabled) mi.onclick = () => {
+        const was = mi.classList.contains('open');
         m.querySelectorAll('.mi.open').forEach(o => o.classList.remove('open'));
         document.querySelectorAll('.menu').forEach(o => { if (+o.dataset.level > level) o.remove(); });
-        if (it.sub && !it.disabled) { mi.classList.add('open'); const r = mi.getBoundingClientRect(); this.build(it.sub, r.right - 2, r.top - 4, level + 1); }
+        if (!was) { mi.classList.add('open'); this.build(it.sub, 0, 0, level + 1, mi); }
       };
-      if (!it.sub && !it.disabled) mi.onclick = () => { this.hide(); it.act(); };
+      else if (!it.sub && !it.disabled) mi.onclick = () => { this.hide(); it.act(); };
       m.append(mi);
     }
     document.body.append(m);
+    m.style.maxHeight = innerHeight - 4 + 'px';
     const r = m.getBoundingClientRect();
+    if (from) {
+      const p = from.closest('.menu').getBoundingClientRect(), right = innerWidth - p.right, left = p.left;
+      x = r.width + 2 <= right || right >= left ? p.right - 2 : p.left - r.width + 2;
+      y = from.getBoundingClientRect().top - 4;
+    }
     m.style.left = Math.max(0, Math.min(x, innerWidth - r.width - 2)) + 'px';
     m.style.top = Math.max(0, Math.min(y, innerHeight - r.height - 2)) + 'px';
   },

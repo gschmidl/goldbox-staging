@@ -34,7 +34,7 @@ input[type=number] { width: 70px; }
   text-align: center; color: #2b2010; }
 #msg h2 { font-weight: normal; }
 .menu { position: fixed; background: var(--menu); border: 1px solid #555; min-width: 230px; padding: 3px 0;
-  z-index: 50; box-shadow: 3px 3px 10px #000c; user-select: none; }
+  z-index: 50; box-shadow: 3px 3px 10px #000c; user-select: none; overflow-y: auto; }
 .menu .mi { padding: 3px 22px 3px 24px; position: relative; display: flex; justify-content: space-between;
   gap: 24px; cursor: default; white-space: nowrap; }
 .menu .mi:hover, .menu .mi.open { background: var(--sel); }
@@ -3115,23 +3115,34 @@ const Menu = {
     ];
   },
   showAt(items, ev) { this.hide(); this.build(items, ev.clientX, ev.clientY, 0); },
-  build(items, x, y, level) {
+  // a submenu opens when its item is clicked (a second click closes it), not when the mouse
+  // passes over it; it goes beside the menu it comes from, on the right where it fits, else
+  // on the left, so that it never covers that menu's items; a menu taller than the window
+  // scrolls
+  build(items, x, y, level, from) {
     const m = el('div', { className: 'menu' });
     m.dataset.level = level;
     for (const it of items) {
       if (it === '-') { m.append(el('div', { className: 'sep' })); continue; }
       const mi = el('div', { className: 'mi' + (it.checked ? ' chk' : '') + (it.sub ? ' sub' : '') + (it.disabled ? ' dis' : '') },
         el('span', { textContent: it.label }), el('span', { className: 'k', textContent: it.key || '' }));
-      mi.onmouseenter = () => {
+      if (it.sub && !it.disabled) mi.onclick = () => {
+        const was = mi.classList.contains('open');
         m.querySelectorAll('.mi.open').forEach(o => o.classList.remove('open'));
         document.querySelectorAll('.menu').forEach(o => { if (+o.dataset.level > level) o.remove(); });
-        if (it.sub) { mi.classList.add('open'); const r = mi.getBoundingClientRect(); this.build(it.sub, r.right - 2, r.top - 4, level + 1); }
+        if (!was) { mi.classList.add('open'); this.build(it.sub, 0, 0, level + 1, mi); }
       };
-      if (!it.sub && !it.disabled) mi.onclick = () => { this.hide(); it.act(); };
+      else if (!it.sub && !it.disabled) mi.onclick = () => { this.hide(); it.act(); };
       m.append(mi);
     }
     document.body.append(m);
+    m.style.maxHeight = innerHeight - 4 + 'px';
     const r = m.getBoundingClientRect();
+    if (from) {
+      const p = from.closest('.menu').getBoundingClientRect(), right = innerWidth - p.right, left = p.left;
+      x = r.width + 2 <= right || right >= left ? p.right - 2 : p.left - r.width + 2;
+      y = from.getBoundingClientRect().top - 4;
+    }
     m.style.left = Math.max(0, Math.min(x, innerWidth - r.width - 2)) + 'px';
     m.style.top = Math.max(0, Math.min(y, innerHeight - r.height - 2)) + 'px';
   },
@@ -3322,7 +3333,7 @@ const ED_CONVERT = {
 
 const Editor = {
   people: [], cur: 0, p: null, rec: null, addr: 0, extra: 0, xpi: null, busy: false,
-  items: [], item: -1, fx: [], eff: -1, sp: null, spellsChanged: false, rows: [], row: -1, icon: null, debug: false,
+  charItems: [], item: -1, fx: [], eff: -1, sp: null, spellsChanged: false, rows: [], row: -1, icon: null, debug: false,
   c: {}, k: {}, lbl: {},
   // whom the list has: the party, in combat everybody when they are more
   roster() { return Game.inCombat && Game.all.length >= Game.party.length ? Game.all : Game.party; },
@@ -3627,12 +3638,12 @@ const Editor = {
     this.p = p; this.rec = q.r; this.addr = p.addr; this.extra = q.extra;
     const me = { r: q.r, addr: p.addr, extra: q.extra };
     await Game.readEffects(me);
-    this.fx = me.effects; this.items = await Items.list(me); this.xpi = xpInfo(me);
+    this.fx = me.effects; this.charItems = await Items.list(me); this.xpi = xpInfo(me);
     this.sp = this.spellState(this.rec);
     this.fill();
     this.fillSpells(true);
     this.fillEffects();
-    this.setList('Items_ListBox', this.items.length <= 16 ? this.items.map(it => Items.compose(it)) : []);
+    this.setList('Items_ListBox', this.charItems.length <= 16 ? this.charItems.map(it => Items.compose(it)) : []);
     this.item = this.eff = -1;
     this.paintIcon();
   },
@@ -3951,7 +3962,7 @@ const Editor = {
   // but the Buck Rogers games' from the controls alone, the rest of them zero)
   itemBlock(it) { const L = Items.layout(); return it.raw.slice(L.dax, L.dax + gdI32(0x654)); },
   itemClick(i) {
-    const it = this.items[i];
+    const it = this.charItems[i];
     if (!it) return;
     this.item = i;
     const b = this.itemBlock(it), at = o => b[gdI32(o)] ?? 0, T = (n, v) => this.text(n, String(v));
@@ -3964,7 +3975,7 @@ const Editor = {
     for (let k = 0; k < 3; k++) T(`ItemProperties${k + 1}_Edit`, b[gdI32(0x680) + k] ?? 0);
   },
   async applyItem() {
-    const i = this.c.Items_ListBox.index, it = this.items[i];
+    const i = this.c.Items_ListBox.index, it = this.charItems[i];
     if (!it || !cheatOk()) return;
     const c = this.c, br = gdU8(0x85937), len = gdI32(0x654), b = br ? this.itemBlock(it) : new Uint8Array(len);
     const num = n => strToIntDef(c[n].value, 0), put = (o, v) => { b[gdI32(o)] = v & 255; };
