@@ -10,7 +10,9 @@ ultimapper5.html in the default web browser instead of the Windows tools.
   page as soon as Staging's webserver answers; the option's DOSBox becomes
   the given Staging with gbc_staging.conf; the taskkill of the tool goes.
   exception.bat.orig keeps each launcher as it was.
-- emulators\\dosbox\\gbc_staging.conf and gbc_staging_page.bat.
+- emulators\\dosbox\\gbc_staging.conf and gbc_staging_page.bat (which also
+  makes the links below again on every start, for an eXo folder that was
+  moved, copied or unzipped).
 - The Staging folder's resources\\webserver, which Staging serves: the three
   pages, and the links util and eXoDOS (to the eXo folder's util and eXoDOS)
   that give the pages the tools' data and the game folders.
@@ -64,13 +66,30 @@ rem   %1 = gbc, ase or ultimapper5
 rem   %2 = the game's folder under eXoDOS, e.g. poolrad or ultima5/upgrade
 rem Staging serves the pages from its resources\webserver folder, where the
 rem links util and eXoDOS give them the tools' data and the game's files.
+rem The links are made again on every start, so that an eXo folder that was
+rem moved, copied or unzipped somewhere else reaches its own util and eXoDOS.
 set port=8086
+for %%I in ("%~dp0..\..") do set "exo=%%~fI"
+set "web=@WEB@"
+call :link util
+call :link eXoDOS
 set "page=%1.html?gamedata=eXoDOS/%2"
 if /i "%1"=="gbc" set "page=%page%&gbcdata=util/GBC"
 if /i "%1"=="ase" set "page=%page%&asedata=util/ASE&ase3data=util/ASE3"
 if /i "%1"=="ultimapper5" set "page=%1.html?data=eXoDOS/%2"
 curl.exe -s -f -o nul --retry 60 --retry-delay 1 --retry-connrefused "http://127.0.0.1:%port%/api/v1/dosbox/info" || exit /b
 start "" "http://localhost:%port%/%page%"
+exit /b
+
+rem The webserver folder's %1 as a link to the eXo folder's %1: a link there
+rem is replaced by a junction (a symbolic link where a junction can't be made);
+rem a real folder of that name is left alone.
+:link
+if not exist "%web%\" exit /b
+for /f "delims=" %%A in ('dir /AL /B "%web%" 2^>nul') do if /i "%%A"=="%~1" rmdir "%web%\%~1"
+if exist "%web%\%~1\" exit /b
+mklink /J "%web%\%~1" "%exo%\%~1" >nul 2>&1 || mklink /D "%web%\%~1" "%exo%\%~1" >nul 2>&1
+exit /b
 '''
 
 README = r'''Companion pages for DOSBox Staging (goldbox-staging, exo\patch_exo.py)
@@ -84,8 +103,11 @@ them the tools' data and the games' files:
 
 The launchers' GBC / ASE / Ultimapper options start this DOSBox Staging with
 emulators\dosbox\gbc_staging.conf and open the page with
-emulators\dosbox\gbc_staging_page.bat. "python patch_exo.py --revert <eXo
-folder>" undoes all of it.
+emulators\dosbox\gbc_staging_page.bat, which also makes the two links again
+each time, so that a moved, copied or unzipped eXo folder reaches its own
+folders. A real folder named util or eXoDOS here (a zip tool may have packed
+the folders the links led to) is left alone: delete it, and the next start
+makes the link. "python patch_exo.py --revert <eXo folder>" undoes all of it.
 '''
 
 TOOL = re.compile(r'start\s+\.\\util\\(GBC\\GBC\.exe|ASE3\\ASE3|ASE\\ASE|Ultimapper5\\Ultimapper_5)\b', re.I)
@@ -242,6 +264,15 @@ class Patcher:
         print(('would ' if self.check else '') + text)
         self.changes += 1
 
+    def helper(self):
+        """gbc_staging_page.bat with the webserver folder in it: relative to the eXo
+        folder (which the batch file finds from where it is) when Staging is in it."""
+        try:
+            web = '%exo%\\' + str(self.web.relative_to(self.exo))
+        except ValueError:
+            web = str(self.web).replace('%', '%%')
+        return HELPER.replace('@WEB@', web)
+
     def rel(self, p):
         try:
             return str(p.relative_to(self.exo))
@@ -336,7 +367,7 @@ class Patcher:
                     orig.write_bytes(text.encode('latin-1'))
                 bat.write_bytes(new.encode('latin-1'))
         self.write(dbx / 'gbc_staging.conf', crlf(CONF))
-        self.write(dbx / 'gbc_staging_page.bat', crlf(HELPER))
+        self.write(dbx / 'gbc_staging_page.bat', crlf(self.helper()), backup=False)
         for s in before - {self.staging}:   # the launchers started another Staging so far
             self.clear(s / 'resources' / 'webserver', keep_folder=True)
         self.old_webservers()
