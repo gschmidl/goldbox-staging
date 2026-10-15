@@ -858,30 +858,36 @@ function parseXp(text) {
 
 /* -------------------------------------------------------- the game */
 
-// the fields in Gateway to the Savage Frontier's saved-game block (Game.blockShift): area, ECL,
-// mode, party size
-const FAR_FIELDS = [5, 6, 11, 13];
+// the Savage Frontier games' saved-game blocks (Game.blockShift), by game: where the game's two
+// copies of its far pointer to the block are (from GBC's base), how far into the block the area
+// byte is, and the fields in the block (Gateway: area, ECL, mode, party size; Treasures: area,
+// ECL, party size - its mode byte is elsewhere)
+const SAVE_BLOCKS = {
+  7: { ptrs: [0xC270, 0xCBA8], area: 0x18A, fields: [5, 6, 11, 13] },
+  8: { ptrs: [0x174F6, 0x182A0], area: 0x12, fields: [5, 6, 13] },
+};
 const Game = {
   g: -1, info: null, base: 0, dosbox: null, ticks: 0, fresh: false,
   party: [], geo: 0, geo3: 0, area: 0, x: 0, y: 0, dir: 0, outX: 0, outY: 0, mode: 0, map: null, mapAddr: 0,
   mapFound: null, mapKey: '', mapFails: 0, mapMsg: '', races: [],
   wasCombat: false, lastHp: [], hitUntil: [], lastEnabled: [], deathUntil: [],
   get f() { return fieldsOf(this.g); },
-  at(i) { return this.base + this.info.o[i] + (this.farShift && FAR_FIELDS.includes(i) ? this.farShift : 0); },
-  // A deviation from GBC 2.65, which reads every field at base + Game.dat's offset: Gateway to
-  // the Savage Frontier keeps the block its saved games are made of (the area, ECL, mode and
-  // party size fields) where its memory manager put it, which depends on the game's setup
-  // (36 KB higher than GBC's offsets in a tester's DOSBox Staging 0.83; GBC then reads stale
-  // bytes and shows the world map in a town). The game's own far pointer to the block, kept
-  // twice in its data segment (base + C270h and + CBA8h), says where; the block's area byte
-  // is 18Ah into it. The page follows it when both copies agree, it points at a paragraph and
+  at(i) { return this.base + this.info.o[i] + (this.farShift && SAVE_BLOCKS[this.g]?.fields.includes(i) ? this.farShift : 0); },
+  // A deviation from GBC 2.65, which reads every field at base + Game.dat's offset: the Savage
+  // Frontier games keep the block their saved games are made of (the area, ECL and party size
+  // fields, Gateway's mode too) where their memory manager put it, which depends on the game's
+  // setup (in a tester's DOSBox Staging 0.83, Gateway's 36 KB and Treasures' 1312 bytes higher
+  // than GBC's offsets; GBC then reads stale bytes and shows the world map in a town). The
+  // game's own far pointer to the block, kept twice in its data segment, says where
+  // (SAVE_BLOCKS). The page follows it when both copies agree, it points at a paragraph and
   // the block there holds a party size of 1 to 8; else it reads where GBC does.
   farShift: 0,
   async blockShift() {
-    if (this.g !== 7) return 0;
-    const [p, q] = await Promise.all([Api.read(this.base + 0xC270, 4), Api.read(this.base + 0xCBA8, 4)]);
+    const sb = SAVE_BLOCKS[this.g];
+    if (!sb) return 0;
+    const [p, q] = await Promise.all(sb.ptrs.map(a => Api.read(this.base + a, 4)));
     if (p.some((v, k) => v !== q[k]) || p[0] || p[1]) return 0;
-    const shift = (p[2] | p[3] << 8) * 16 + 0x18A - (this.base + this.info.o[5]);
+    const shift = (p[2] | p[3] << 8) * 16 + sb.area - (this.base + this.info.o[5]);
     if (!shift || !(p[2] | p[3])) return 0;
     const size = (await Api.read(this.base + this.info.o[13] + shift, 1))[0];
     return size >= 1 && size <= 8 ? shift : 0;
@@ -904,7 +910,7 @@ const Game = {
     return false;
   },
   async poll() {
-    if (this.g === 7 && this.ticks % 8 === 0) this.farShift = await this.blockShift();
+    if (SAVE_BLOCKS[this.g] && this.ticks % 8 === 0) this.farShift = await this.blockShift();
     const o = this.info.o, rd = (i, n) => o[i] ? Api.read(this.at(i), n) : Promise.resolve(new Uint8Array(n));
     const [first, geo, area, mapPtr, pos, out, mode, size, g3] = await Promise.all([rd(3, 4), rd(4, 1), rd(5, 1), rd(7, 4),
       rd(8, 3), rd(12, 3), rd(11, 1), rd(13, 1), rd(6, 1)]);
