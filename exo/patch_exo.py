@@ -77,6 +77,16 @@ set "page=%1.html?gamedata=eXoDOS/%2"
 if /i "%1"=="gbc" set "page=%page%&gbcdata=util/GBC"
 if /i "%1"=="ase" set "page=%page%&asedata=util/ASE&ase3data=util/ASE3"
 if /i "%1"=="ultimapper5" set "page=%1.html?data=eXoDOS/%2"
+rem The page file's size and time in the address: Staging's webserver lets the
+rem browser keep a page it served for a while without asking again, and a new
+rem page put here then wouldn't be the one that runs.
+set "stamp="
+for %%F in ("%web%\%1.html") do set "stamp=%%~zF-%%~tF"
+if defined stamp set "stamp=%stamp: =%"
+if defined stamp set "stamp=%stamp:/=%"
+if defined stamp set "stamp=%stamp::=%"
+if defined stamp set "stamp=%stamp:.=%"
+if defined stamp set "page=%page%&v=%stamp%"
 curl.exe -s -f -o nul --retry 60 --retry-delay 1 --retry-connrefused "http://127.0.0.1:%port%/api/v1/dosbox/info" || exit /b
 start "" "http://localhost:%port%/%page%"
 exit /b

@@ -261,6 +261,16 @@ shell's last choice - or the "FRUA design..." setting):
   design folder's SAVE\ (SAVGAM<L>.CSV, VAULT<L>.DAT).
 - checked against a mock of the API (scratchpad mockfrua.py: the HEIRS design,
   its maps 10 and 5 placed in memory), not against the game.
+- the game keeps the name of the design it plays at base+383D4 ("HEIRS.DSN",
+  "DL1.DSN" in testers' dumps, 2026-10-18); the page takes that before
+  START.DAT, which eXo's mods launcher (gamedata unlimadv/MODS) leaves at
+  DEFAULT.DSN whatever module is played.
+- under Staging the first exact copy of the walls can be a buffer the game
+  soon reuses (Heirs' keep at 42AC2, the copy kept at 5B402): the page looks
+  again when the walls read stop matching the file.
+- Staging's webserver (cpp-httplib) sends ETag and Last-Modified and no
+  Cache-Control, so browsers may run a cached page after it was replaced; the
+  eXo launcher puts the page file's size and time in the address (&v=).
 
 ## Found by the fidelity tests (tests/fidelity, 2026-10-07)
 

@@ -1994,14 +1994,23 @@ setInterval(() => Store.flush(), 3000);
  * characters), at 142 the cells, 6 bytes each (north, east, south, west wall
  * bytes, event number, one more), at ECA 2000 bytes of encounter data. Like
  * GBC, the page finds both blocks in the game's memory when the map changes
- * and reads the walls from there. The design folder is the one named in
- * START.DAT (the shell's last choice) unless the settings name another. */
+ * and reads the walls from there. GBC plays the design picked in its combo
+ * box; the page takes the settings' one, else the one the game keeps the name
+ * of (base+383D4, e.g. "DL1.DSN"), else the one START.DAT names (the shell's
+ * last choice; eXo's mods launcher serves a folder where that is DEFAULT.DSN). */
 const Frua = {
-  design: '', cache: {}, geo: -1, wallAddr: 0, eventAddr: 0, data: null, rec: null, retryAt: 0, recheckAt: 0,
-  reset() { Object.assign(this, { design: '', cache: {}, geo: -1, wallAddr: 0, eventAddr: 0, data: null, rec: null, retryAt: 0, recheckAt: 0 }); },
+  design: '', playing: '', cache: {}, geo: -1, wallAddr: 0, eventAddr: 0, data: null, rec: null, retryAt: 0, recheckAt: 0, nameAt: 0,
+  reset() { Object.assign(this, { design: '', playing: '', cache: {}, geo: -1, wallAddr: 0, eventAddr: 0, data: null, rec: null, retryAt: 0, recheckAt: 0, nameAt: 0 }); },
+  // the design folder name in the game's memory, or ''
+  async playedDesign() {
+    let n = '';
+    for (const b of await Api.read(Game.base + 0x383D4, 13)) { if (!b) break; n += String.fromCharCode(b); }
+    return /^[!-~]{1,8}\.dsn$/i.test(n) ? n : '';
+  },
   async designFolder() {
     if (this.design) return this.design;
     if (Settings.v.fruaDesign) return this.design = Settings.v.fruaDesign;
+    if (this.playing) return this.design = this.playing;
     const f = await Files.get('START.DAT');
     if (f) {
       let n = '';
@@ -2033,6 +2042,15 @@ const Frua = {
   },
   // each tick: the map's live cells; a changed GEO loads its file and looks for it
   async poll() {
+    // another design started (every 2 s): its files from then on
+    if (Date.now() >= this.nameAt) {
+      this.nameAt = Date.now() + 2000;
+      const d = await this.playedDesign();
+      if (d && d.toLowerCase() !== this.playing.toLowerCase()) {
+        this.playing = d;
+        if (!Settings.v.fruaDesign && this.design.toLowerCase() !== d.toLowerCase()) Object.assign(this, { design: '', cache: {}, geo: -1, failed: false });
+      }
+    }
     const n = Game.area;
     if (n !== this.geo) { this.geo = n; this.rec = null; this.data = null; this.wallAddr = 0; this.retryAt = 0; }
     if (!this.rec) {
