@@ -1997,8 +1997,8 @@ setInterval(() => Store.flush(), 3000);
  * and reads the walls from there. The design folder is the one named in
  * START.DAT (the shell's last choice) unless the settings name another. */
 const Frua = {
-  design: '', cache: {}, geo: -1, wallAddr: 0, eventAddr: 0, data: null, rec: null, retryAt: 0,
-  reset() { Object.assign(this, { design: '', cache: {}, geo: -1, wallAddr: 0, eventAddr: 0, data: null, rec: null, retryAt: 0 }); },
+  design: '', cache: {}, geo: -1, wallAddr: 0, eventAddr: 0, data: null, rec: null, retryAt: 0, recheckAt: 0,
+  reset() { Object.assign(this, { design: '', cache: {}, geo: -1, wallAddr: 0, eventAddr: 0, data: null, rec: null, retryAt: 0, recheckAt: 0 }); },
   async designFolder() {
     if (this.design) return this.design;
     if (Settings.v.fruaDesign) return this.design = Settings.v.fruaDesign;
@@ -2023,12 +2023,12 @@ const Frua = {
     return this.cache[n] = { w, h, name, walls: d.slice(0x142, 0x142 + w * h * 6), events: d.slice(0xECA, 0xECA + 2000) };
   },
   // GBC's search: the file's wall and encounter blocks somewhere in the first megabyte
-  async locate(rec) {
+  async locate(rec, quiet) {
     const mem = new Uint8Array(0x100000);
     for (let a = 0; a < mem.length; a += 0x10000) mem.set(await Api.read(a, 0x10000), a);
     const w = indexOf(mem, rec.walls), e = w < 0 ? -1 : indexOf(mem, rec.events);
-    if (w < 0) log(' - ERROR: Can not find map wall data from the memory!');
-    else if (e < 0) log(' - ERROR: Can not find map event data from the memory!');
+    if (w < 0 && !quiet) log(' - ERROR: Can not find map wall data from the memory!');
+    else if (e < 0 && !quiet) log(' - ERROR: Can not find map event data from the memory!');
     return w >= 0 && e >= 0 ? [w, e] : null;
   },
   // each tick: the map's live cells; a changed GEO loads its file and looks for it
@@ -2055,6 +2055,22 @@ const Frua = {
       log(` - Map event data found at $${hex(this.eventAddr, 6)}.`);
     }
     this.data = await Api.read(this.wallAddr, this.rec.w * this.rec.h * 6);
+    // the first copy found can be one the game soon uses for something else (under DOSBox
+    // Staging, the buffer it read the file into: a tester's page then drew every cell as a
+    // walled room); when the walls there have little to do with the file any more, it looks
+    // again (every 2 s) and moves to a copy found elsewhere (GBC itself finds the copy the game
+    // keeps under DOSBox ECE); without one it stays
+    let same = 0;
+    for (let k = 0; k < this.data.length; k++) if (this.data[k] === this.rec.walls[k]) same++;
+    if (same < this.data.length * 0.9 && Date.now() >= this.recheckAt) {
+      this.recheckAt = Date.now() + 2000;
+      const at = await this.locate(this.rec, true);
+      if (at && at[0] !== this.wallAddr) {
+        [this.wallAddr, this.eventAddr] = at;
+        log(` - Map wall data found again at $${hex(this.wallAddr, 6)}.`);
+        this.data = await Api.read(this.wallAddr, this.rec.w * this.rec.h * 6);
+      }
+    }
   },
   view() { return this.rec && this.data ? { w: this.rec.w, h: this.rec.h, data: this.data, stride: this.rec.w, frua: true, live: true } : null; },
   // GBC's text for the event under the mouse in the events view: its number, and the type
