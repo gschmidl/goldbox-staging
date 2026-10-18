@@ -2137,6 +2137,24 @@ function flagged(x, y) { return !Game.mv.frua && (event(x, y) & 0x80) !== 0; }
 function partyExplore() {
   if (Game.mv && Game.posOk !== false && [0, 2, 4, 6].includes(Game.facing)) Store.mark(Game.x, Game.y);
 }
+// GBC does it on a 20 Hz timer; the page's whole read takes longer, so between them the
+// position alone is read every 50 ms (else a party moving fast leaves cells unexplored),
+// marked on the map of the last whole read when the game is still in that area
+async function exploreSampler() {
+  for (;;) {
+    await sleep(50);
+    try {
+      const g = Game.g, o = Game.info?.o;
+      if (g < 0 || !o?.[8] || !Game.mv) continue;
+      const [pos, area, geo] = await Promise.all([Api.read(Game.at(8), 3), o[5] ? Api.read(Game.at(5), 1) : null,
+        o[4] ? Api.read(Game.at(4), 1) : null]);
+      if (Game.g !== g || !Game.mv || area && area[0] !== Game.area || geo && geo[0] !== Game.geo || ![0, 2, 4, 6].includes(pos[2])) continue;
+      const rec = g === 9 ? null : Game.areaRec();
+      if (rec && rec.w >= 1 && rec.w <= 50 && rec.h >= 1 && rec.h <= 50 && (pos[0] >= rec.w || pos[1] >= rec.h)) continue;
+      Store.mark(pos[0], pos[1]);
+    } catch { }
+  }
+}
 
 // GBC's colours
 const MAPC = { bg: '#b2944e', cell: '#aa8c46', flagged: '#a2843e', wall: '#594a2d', door: '#cccccc', party: '#00aa00',
@@ -2534,6 +2552,7 @@ async function loop() {
     return;
   }
   let lastArea = '';
+  exploreSampler();
   for (;;) {
     try {
       if (Game.g < 0) {

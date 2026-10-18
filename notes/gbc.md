@@ -268,6 +268,10 @@ shell's last choice - or the "FRUA design..." setting):
 - under Staging the first exact copy of the walls can be a buffer the game
   soon reuses (Heirs' keep at 42AC2, the copy kept at 5B402): the page looks
   again when the walls read stop matching the file.
+- GBC marks the party's cell from a 20 Hz timer; the page's whole read plus
+  its 250 ms pause was slower, and a party moving fast left unexplored cells
+  (a walk at 10 cells/s: 8 of 17 marked). exploreSampler reads only the
+  position (and area, GEO) every 50 ms and marks with partyExplore's rules.
 - Staging's webserver (cpp-httplib) sends ETag and Last-Modified and no
   Cache-Control, so browsers may run a cached page after it was replaced; the
   eXo launcher puts the page file's size and time in the address (&v=).
