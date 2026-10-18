@@ -2132,14 +2132,29 @@ function event(x, y) { const M = Game.mv; return M.frua ? M.data[(y * M.w + x) *
 // a cell GBC colours darker: the event byte's top bit (not in FRUA, whose bytes have none)
 function flagged(x, y) { return !Game.mv.frua && (event(x, y) & 0x80) !== 0; }
 
-// GBC marks the cell the party stands on, when it faces north, east, south or
-// west (the games turn by 45 degrees in between)
-function partyExplore() {
-  if (Game.mv && Game.posOk !== false && [0, 2, 4, 6].includes(Game.facing)) Store.mark(Game.x, Game.y);
+// GBC's 20 Hz explore tick (FUN_000a2c80): the cell the party stands on, inside the map and
+// facing north, east, south or west (the games turn by 45 degrees in between), is marked
+// unless the map was not found. In a map other than the one of the last mark, a position
+// the same as that mark's (left over from the map before) waits: a second, twice, then it
+// is marked anyway; the count starts again with each map found. A position out of the map
+// or facing between clears the last mark's position. A tick of a cell already explored, or
+// of the wait, does nothing else.
+const Explore = { key: null, x: 0, y: 0, f: 0, waits: 0, cool: 0, map: null };
+function exploreTick(x, y, f) {
+  const E = Explore, rec = Game.g === 9 ? null : Game.areaRec(), key = Store.key();
+  const dims = rec && rec.w >= 1 && rec.w <= 50 && rec.h >= 1 && rec.h <= 50;
+  if (key !== E.map) { E.map = key; E.waits = 0; }
+  if (x >= (dims ? rec.w : MW()) || y >= (dims ? rec.h : MH()) || ![0, 2, 4, 6].includes(f)) { Object.assign(E, { x: 0, y: 0, f: 0 }); return; }
+  if (Store.exp()[cellOf(x, y)]) return;
+  if (E.cool > 0) { E.cool--; return; }
+  if (key === E.key || x !== E.x || y !== E.y || f !== E.f || E.waits > 1) {
+    Object.assign(E, { key, x, y, f });
+    Store.mark(x, y);
+  } else { E.waits++; E.cool = 20; }
 }
-// GBC does it on a 20 Hz timer; the page's whole read takes longer, so between them the
-// position alone is read every 50 ms (else a party moving fast leaves cells unexplored),
-// marked on the map of the last whole read when the game is still in that area
+// the page's whole read takes longer than GBC's tick, so the position alone is read every
+// 50 ms (else a party moving fast leaves cells unexplored), on the map of the last whole
+// read while the game is still in that area
 async function exploreSampler() {
   for (;;) {
     await sleep(50);
@@ -2148,10 +2163,8 @@ async function exploreSampler() {
       if (g < 0 || !o?.[8] || !Game.mv) continue;
       const [pos, area, geo] = await Promise.all([Api.read(Game.at(8), 3), o[5] ? Api.read(Game.at(5), 1) : null,
         o[4] ? Api.read(Game.at(4), 1) : null]);
-      if (Game.g !== g || !Game.mv || area && area[0] !== Game.area || geo && geo[0] !== Game.geo || ![0, 2, 4, 6].includes(pos[2])) continue;
-      const rec = g === 9 ? null : Game.areaRec();
-      if (rec && rec.w >= 1 && rec.w <= 50 && rec.h >= 1 && rec.h <= 50 && (pos[0] >= rec.w || pos[1] >= rec.h)) continue;
-      Store.mark(pos[0], pos[1]);
+      if (Game.g !== g || !Game.mv || area && area[0] !== Game.area || geo && geo[0] !== Game.geo) continue;
+      exploreTick(pos[0], pos[1], pos[2]);
     } catch { }
   }
 }
@@ -2579,7 +2592,6 @@ async function loop() {
       setConn(`DOSBox ${Game.dosbox.version.split(' ')[0]}`, 'ok');
       const key = Store.key();
       if (key !== lastArea) { lastArea = key; Render.notes = await Store.notesOf(); Render.nameUntil = performance.now() + 2500; }
-      partyExplore();
       Hud.draw();
       updateTitle();
       Render.draw();

@@ -272,6 +272,14 @@ shell's last choice - or the "FRUA design..." setting):
   its 250 ms pause was slower, and a party moving fast left unexplored cells
   (a walk at 10 cells/s: 8 of 17 marked). exploreSampler reads only the
   position (and area, GEO) every 50 ms and marks with partyExplore's rules.
+- GBC's explore tick (GBC_Memory.c FUN_000a2c80) has one more rule: in a map
+  other than the last mark's, a position equal to that mark's (x, y, facing
+  left over from the map before) waits 20 ticks, twice, before it is marked;
+  the count restarts with each map found; a position outside the map or
+  facing between clears the last mark's position; the wait only counts down
+  on ticks of an unexplored cell. The page marked such leftovers at once
+  (testers: stray cells in FRUA modules that move the party between maps
+  during their intros). exploreTick ports it, run only from the 50 ms sampler.
 - Staging's webserver (cpp-httplib) sends ETag and Last-Modified and no
   Cache-Control, so browsers may run a cached page after it was replaced; the
   eXo launcher puts the page file's size and time in the address (&v=).
