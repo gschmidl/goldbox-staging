@@ -58,6 +58,11 @@ pedestal, 29/30 light pad, 31 wall of force, 32 bashable wall).
   race, class, alignment, food, HP cur/max, XP 1-3 - not AC or levels.
 - Monster HP: byte 0C max, 0E current; tooltips print "(current / max hit
   points)". EOB2 monsters are just "Monster".
+- Teleport here (EOB 1/2): the map's mouse cell, which while the popup menu
+  is open stays the one right-clicked. The page took the cell under the mouse
+  when the item ran, none once the mouse is on the menu (2026-10-19, a tester:
+  the item did nothing, T worked); it now keeps the right-clicked cell. The
+  fidelity session opens the page's menu with a right click on the map.
 
 ## The original's map window details
 

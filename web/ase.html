@@ -1514,8 +1514,10 @@ cv.addEventListener('mousedown', ev => {   // Ctrl+click adds a note, like the o
   const c = Render.cellAt(ev);
   if (c) { Render.lastMouse = c; setTimeout(() => addNote(c), 0); }
 });
-cv.addEventListener('contextmenu', ev => { ev.preventDefault(); Menu.show(ev.clientX, ev.clientY); });
-$('#menuBtn').onclick = ev => { const r = ev.target.getBoundingClientRect(); Menu.show(r.right - 240, r.bottom); };
+// the menu's items act on the cell it was opened on (the original's popup menu: the map's
+// mouse cell stays the one right-clicked while the menu is open); the menu button's on none
+cv.addEventListener('contextmenu', ev => { ev.preventDefault(); Menu.cell = Render.cellAt(ev); Menu.show(ev.clientX, ev.clientY); });
+$('#menuBtn').onclick = ev => { const r = ev.target.getBoundingClientRect(); Menu.cell = null; Menu.show(r.right - 240, r.bottom); };
 window.addEventListener('resize', () => Render.draw());
 
 document.addEventListener('keydown', ev => {
@@ -1577,7 +1579,7 @@ function peek() {
 }
 function exploreLevel() { if (Game.coords && confirm('Really set the whole level map explored?')) Store.fill(Game.level, 1); }
 function unexploreLevel() { if (Game.coords && confirm('Really set the whole level map unexplored?')) Store.fill(Game.level, 0); }
-async function teleportHere() {
+async function teleportHere(cell) {
   if (Game.id === 3) {   // ASE3: to the cell the mouse was last over, wall or not
     const c = Render.lastMouse;
     if (!Game.coords || c.x < 0) return;
@@ -1585,7 +1587,7 @@ async function teleportHere() {
     log(`Teleported to ${pad2(c.x + 1)},${pad2(c.y + 1)}`);
     return;
   }
-  const c = Render.mouse;
+  const c = cell || Render.mouse;   // the menu's cell, else (T) the one under the mouse
   if (!c || !Game.coords) return;
   await Api.write(Game.addr('coords') + Game.cfg.coordBlock, Uint8Array.of(c.b & 255, c.b >> 8));
   log(`Teleported to ${pad2(c.x)},${pad2(c.y)}`);
@@ -2002,7 +2004,7 @@ const Menu = {
       { label: 'Peek level', key: 'Z', act: peek },
       { label: 'Explore level', key: 'X', act: exploreLevel },
       { label: 'Unexplore level', act: unexploreLevel },
-      { label: 'Teleport here', key: 'T', act: teleportHere },
+      { label: 'Teleport here', key: 'T', act: () => teleportHere(Menu.cell) },
       { label: 'Copy explored from ', disabled: Game.id === 1, sub: copy },
       ...(slots.length < 2 ? [] : [{ label: 'Save game slot', sub: slots.map(n => ({ label: `Slot ${n}`, checked: n === s.slot, act: () => setSlot(n) })) }]),
       { label: 'Clear explored maps', act: clearExplored12 },   // the original's wizard has it

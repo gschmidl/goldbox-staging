@@ -316,8 +316,8 @@ class Original(Common):
         memo = self.t.control('TMemo', h=h)
         return original.window_text(memo).replace('\r\n', '\n').rstrip('\n') if memo else ''
 
-    def menu(self, *path):
-        items = self.t.popup(self.main)
+    def menu(self, *path, on_map=False):
+        items = self.t.popup(self.main)   # (the map's mouse cell stays the one under the mouse)
         it = original.Tool.find_item(items or [], list(path))
         if not it:
             raise RuntimeError(f'no menu item {path}')
@@ -576,8 +576,13 @@ class Page(Common):
     def tooltip(self):
         return self.b.js("(t => t.style.display === 'block' ? t.textContent.replace(/\\n+$/, '') : '')(document.querySelector('#tip'))")
 
-    def menu(self, *path):
+    def menu(self, *path, on_map=False):
+        """on_map: opened as a user does, by a right click on the map where the mouse is,
+        which then leaves the map for the menu."""
         self.answer_next()
+        if on_map:
+            self.b.js('''(() => { const [x, y] = Render.lastXY, o = { clientX: x, clientY: y, bubbles: true, button: 2 };
+              cv.dispatchEvent(new MouseEvent('contextmenu', o)); cv.dispatchEvent(new MouseEvent('mouseleave', o)); return 1; })()''')
         r = self.b.js('''(path => {
           let items = Menu.items(), it = null;
           for (const p of path) {
@@ -586,7 +591,7 @@ class Page(Common):
             items = it.sub || [];
           }
           if (it.disabled) return 'disabled';
-          setTimeout(() => it.act(), 0);   // dialogs it opens must not hold up this call
+          setTimeout(() => { Menu.hide(); it.act(); }, 0);   // dialogs it opens must not hold up this call
           return 'ok';
         })(%s)''' % harness.json.dumps(list(path)))
         if r == 'missing':
@@ -865,14 +870,14 @@ def sizes(s):
 
 
 def teleport(s):
-    """Teleport here: the mouse's cell, from the menu and by key."""
+    """Teleport here: the mouse's cell, from the menu (opened on the map) and by key."""
     r = s.run
     r.reset_game()
     st = r.state()
     s.set(st)
     s.start()
     s.move(st.x + 2, st.y)
-    s.menu('Teleport here')
+    s.menu('Teleport here', on_map=True)
     s.settle()
     s.observe('memory', s.memory_changes())
     s.move(st.x, st.y + 3)
