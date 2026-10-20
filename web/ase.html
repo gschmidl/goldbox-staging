@@ -2570,8 +2570,13 @@ const Editor3 = {
     return out;
   },
   async findInMemory() {
-    // where they were last time, else a search of all memory
-    const party = this.partyIds(await Api.read(Game.locAddr - 14, 18), 14);
+    // the game's own way from the party's members to their records, else where they were
+    // last time, else a search of all memory
+    const party = this.partyIds(await Api.read(Game.locAddr - 14, 18), 14), ids = party.map(k => k + C3.firstId);
+    if (this.objList && ids.length) {
+      const recs = await this.viaObjects(ids);
+      if (recs.length === ids.length) return recs;
+    }
     if (this.base) {
       const recs = await this.readRecords(this.base, party);
       if (recs.length) return recs;
@@ -2590,9 +2595,57 @@ const Editor3 = {
       for (let k = 0; k < C3.records; k++) if (hits.includes(h + k * C3.memStride)) s++;
       if (s > score) { best = h; score = s; }
     }
+    const list = ids.length ? this.findObjList(mem, hits, ids, best) : 0;
+    if (list) {
+      this.objList = list;
+      const recs = await this.viaObjects(ids);
+      if (recs.length === ids.length) { log(`Characters found through the object list at ${hex(list, 6)}`); return recs; }
+      this.objList = 0;
+    }
     if (best < 0) return [];
     this.base = best;
     return this.readRecords(best, party);
+  },
+  // AESOP's objects: object n's handle at objList + 4n points at a 24-byte handle entry
+  // whose first word is the object's memory block, a character's name 97 bytes into it.
+  // A loaded game's records lie 623 bytes apart; a new game's members are blocks of their
+  // own, while the Quick Start party's and the NPCs' records stay in that array unused
+  // (a tester's editor showed those), so the members are followed from their numbers
+  async viaObjects(ids) {
+    const u32 = async a => { const b = await Api.read(a, 4); return (b[0] | b[1] << 8 | b[2] << 16 | b[3] << 24) >>> 0; };
+    const recs = [];
+    for (const id of ids) {
+      const entry = await u32(this.objList + 4 * id), block = entry && entry < Api.size ? await u32(entry) : 0;
+      if (!block || block + 0x97 + C3.to > Api.size) continue;
+      const at = block + 0x97, data = await Api.read(at + C3.from, C3.to - C3.from);
+      const view = new Uint8Array(C3.to - C3.from + 64); view.set(data);
+      if (charOk3(view, -C3.from)) recs.push({ index: id - C3.firstId, at, data, orig: data.slice() });
+    }
+    return recs;
+  },
+  // the object list: a base whose slots for all the party's members lead (through a
+  // handle entry) to records found in memory. Any run of objects that are characters
+  // fits as well (a new game's members, then the NPCs: one 4 objects further fits too),
+  // so of those the one is taken under which the 623-byte array's record k is object
+  // 20 + k (all of them in a loaded game, the NPCs' in a new one)
+  findObjList(mem, hits, ids, array) {
+    const w = new Uint32Array(mem.buffer, mem.byteOffset, mem.length >> 2);
+    const word = a => a >= 0 && a + 4 <= mem.length && !(a & 3) ? w[a >> 2] : 0;
+    const find = v => { const out = []; for (let i = 0; i < w.length; i++) if (w[i] === v) out.push(i * 4); return out; };
+    const votes = new Map();
+    for (const h of hits) for (const e of find(h - 0x97)) for (const s of find(e)) for (const id of ids) {
+      const b = s - 4 * id;
+      votes.set(b, (votes.get(b) || 0) + 1);
+    }
+    const name = (b, n) => { const e = word(b + 4 * n), blk = e ? word(e) : 0; return blk ? blk + 0x97 : -1; };
+    let best = 0, key = -1;
+    for (const [b, n] of votes) {
+      if (n < ids.length) continue;
+      let fit = 0;
+      if (array >= 0) for (let k = 0; k < C3.records; k++) if (name(b, C3.firstId + k) === array + k * C3.memStride) fit++;
+      if (fit > key) { best = b; key = fit; }
+    }
+    return key >= 0 ? best : 0;
   },
   async readRecords(base, party) {
     const recs = [];

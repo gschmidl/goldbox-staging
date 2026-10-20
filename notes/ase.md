@@ -123,7 +123,24 @@ spells (levels 1-9: 6 6 10 4 3 5 4 2 4), 174 + level*10 cleric spells (1-7:
 7 7 7 7 6 4 2); a spell byte is FF (not available) or the memorized count.
 Records are 623 bytes apart in memory, 627 in the file (first name at 340);
 party member object 20 = record 0. ASE3's in-memory editor reads 444 bytes
-from the name (no equipment); its save-file editor shows equipment.
+from the name (no equipment); its save-file editor shows equipment. ASE3
+finds them by searching memory for the newest save's names (FUN_00458a30).
+
+A new game (characters created or transferred, never saved; a tester's dump,
+2026-10-20) is different: the 623-byte array still holds the Quick Start
+party and the NPCs (THELMA, LOUISE, FAST EDDIE, NOAH FECT, Bug, Father Jon,
+Tabitha, Isharn, Delmair, Rex), and the party's records are blocks of their
+own elsewhere (Sarah 206B4F, Seana 207161, Wiona 207499, Gigi 207ADC); the
+page's array search then showed the Quick Start party. AESOP's way there:
+object n's slot in the object list (base 18D2A0 there, 4 bytes per object)
+holds a 24-byte handle entry's address; the entry's first word is the
+object's block, the name 97 bytes into it. Nothing points at the Quick Start
+records any more; objects 24-29 (the NPCs) are array records 4-9. Any run of
+character objects fits the party's numbers, so the page takes the list base
+under which array record k is object 20 + k. Two copies of the party block
+(1E0274, 207EB4) were in memory too, both naming 20-23 (the location chooser
+picks the live one when the party moves). After a save and restore all is
+in the array again.
 
 Equipment slot k (memory order) -> ASE3 name: 0-13 Backpack 01-14, 14 Armor,
 15 Bracers, 16 Hand 1, 17 Ring 1, 18 Ring 2, 19 Boots, 20 Hand 2, 21-23 Belt

@@ -26,6 +26,7 @@ import original
 
 MEM = 4 << 20
 SIGN_AT, MAP_AT, LOC_AT, RECS_AT = 0x20000, 0x1E13AA, 0x1DA9CB, 0x1D0000
+OBJLIST_AT, HANDLES_AT = 0x18D2A0, 0x1A8C70
 LEVEL_NAMES = ["Warrior's tomb 1", "Warrior's tomb 2", 'Burial glen', 'Forest trail', 'Guildhall quarter ruins',
                "Mages' guild 1", "Mages' guild 2", "Mages' guild 3", "Mages' guild 4", 'Temple quarter ruins',
                'Temple of Lathander 1', 'Temple of Lathander 2', 'Temple of Lathander 3', 'Temple of Lathander 4']
@@ -69,6 +70,12 @@ class State:
         for k in range(10):   # the save's records, 627 bytes apart there, 623 in memory
             at = 0x340 + k * 627
             mem[RECS_AT + k * 623:RECS_AT + k * 623 + 0x1F8] = self.save[at - 0x3C:at + 0x1BC]
+            # as AESOP keeps them (a tester's memory): object 20 + k's slot in the object
+            # list points at a 24-byte handle entry, its first word the record's block,
+            # the name 97 bytes into it
+            entry = HANDLES_AT + 24 * k
+            mem[OBJLIST_AT + 4 * (0x20 + k):OBJLIST_AT + 4 * (0x21 + k)] = struct.pack('<I', entry)
+            mem[entry:entry + 4] = struct.pack('<I', RECS_AT + k * 623 - 0x97)
         return bytes(mem)
 
     def open_cells(self, n, avoid=()):
