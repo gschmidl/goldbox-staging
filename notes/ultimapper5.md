@@ -207,5 +207,12 @@ area), not against the game.
   placed goes back to its kept place (kept at the first placement and on hiding).
   R shows it as new (placed again, nothing chosen). The HUD click (left: spells,
   else inventory) needs the game and an active party, and gives the window the focus.
+- The inventory (459BE4) takes its font from the height alone ((H - 2 * round(W / 20)
+  - 44) / 44), the column width from the widest of the 112 names with their effects
+  ("Kal Xen Corp (Summon Daemon)") + "999" + 3 spaces, x0 = (W - 3 columns) / 2 with
+  no bound: in the original's own 648 x 776 (no HUD) x0 is about -30, both sides cut
+  (a tester, 2026-10-20). The harness's window (634 x 514, wider) fits, so the suite
+  never showed it. With the user's OK the page lowers the font until the three
+  columns fit; where they fit it draws as the original (the lists sessions).
 - Save map as bitmap saves the composed map bitmap as shown, suggesting World.bmp,
   Underworld.bmp, <location>_z<level>.bmp (a basement -1), Combat.bmp or Map.bmp.

@@ -2199,13 +2199,21 @@ const Lists = {
   },
   // three columns: helmets, shields, armour, then the quest items; weapons, rings, amulets;
   // scrolls and potions, then the reagents; a count (FF of a quest item: 1) and a name each,
-  // an effect after it greyer
+  // an effect after it greyer. The original takes the font from the height alone, and in a
+  // narrow window (its own 648 x 776 without the HUD) the three columns then reach past both
+  // sides; the page makes the font smaller until they fit (where they fit, as the original)
   drawInventory(g, W, H) {
-    const s = Game.save, m = round(W / 20), fh = Math.trunc((H - 2 * m - 44) / 44), line = fh + 1;
+    const s = Game.save, m = round(W / 20);
+    let fh = Math.trunc((H - 2 * m - 44) / 44), tw, w999, wSp, colW;
+    for (;;) {
+      this.font(g, fh);
+      tw = t => Gdi.width(g, t);
+      w999 = tw('999'); wSp = tw('   '); colW = Math.max(...LIST_ITEMS.map(tw)) + w999 + wSp;
+      if (3 * colW <= W || fh <= 1) break;
+      fh--;
+    }
+    const line = fh + 1;
     this.rows = 0; this.rects = [];
-    this.font(g, fh);
-    const tw = t => Gdi.width(g, t);
-    const w999 = tw('999'), wSp = tw('   '), colW = Math.max(...LIST_ITEMS.map(tw)) + w999 + wSp;
     const y0 = Math.trunc((H - 44 * fh - 44) / 2);
     let x = Math.trunc((W - 3 * colW) / 2), y = y0, col1 = [0, 0], off = 0x21A;
     const text = (t, x, colour) => { g.fillStyle = colour; Gdi.text(g, t, x, y); };
