@@ -714,7 +714,8 @@ class Original(Common):
 # Menu items that are one side's own: the original's window and Windows matters, the
 # page's browser matters (README: what a browser can't do)
 MENU_OWN = {'Match DOSBox size', 'Switch docking', 'Toggle title bar', 'Change hotkey', 'Global hotkey',
-            'Open game folder', 'Settings', 'Fit to window', 'Show HUD', 'Open in its own window', 'Game folder…'}
+            'Open game folder', 'Settings', 'Fit to window', 'Show HUD', 'Open in its own window', 'Game folder…',
+            'Bright colours'}
 
 
 def comparable_menu(items):
@@ -747,6 +748,7 @@ class Page(Common):
         v = {SETTINGS[k][0]: (val if k == 'quickfight_interval' else bool(val)) for k, val in self.settings.items()}
         v['size'] = self.map_size
         v['hud'] = True
+        v['light'] = False   # the page's bright scheme off: the original's colours
         b.goto(f'http://127.0.0.1:{self.fake.port}/{self.fake.BLANK}')
         b.js(PAGE_SETUP % harness.json.dumps(v))
         p = find_file(self.run.game, 'Explored.UM5')   # the original's from its run

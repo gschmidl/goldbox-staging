@@ -74,6 +74,25 @@ input[type=number] { width: 70px; }
 .muted { color: #888; }
 .hidden { display: none !important; }
 a { color: #8ab4f8; }
+/* the bright scheme (the setting "Bright colours"): black text on white for the page's own
+   bar, menus, dialogs, tips and log; the map and the HUD are the game's and the original's */
+html.light { --bg: #fff; --panel: #f4f4f4; --line: #c8c8c8; --text: #000; --dim: #8a8a8a; --menu: #fff; --sel: #cfe0fa; }
+html.light #bar { background: #f0f0f0; }
+html.light .chip { background: #e2e2e2; }
+html.light .chip.ok { background: #c9eac9; } html.light .chip.bad { background: #f3c6c6; } html.light .chip.warn { background: #f3e3b0; }
+html.light button, html.light select, html.light input { background: #fff; border-color: #9a9a9a; }
+html.light button:hover { background: #e8e8e8; }
+html.light #tip { background: #fffffa; border-color: #888; color: #000; box-shadow: 2px 2px 6px #0004; }
+html.light #msg { color: #333; } html.light #msg h2 { color: #000; }
+html.light .menu { border-color: #999; box-shadow: 3px 3px 10px #0004; }
+html.light .menu .mi .k { color: #555; } html.light .menu .sep { background: #ccc; }
+html.light .dlg { background: #fff; border-color: #999; box-shadow: 4px 4px 14px #0004; }
+html.light .dlg header { background: #ececec; border-bottom-color: #ccc; }
+html.light .list th { color: #444; border-bottom-color: #ccc; background: #fff; }
+html.light .list tr:hover td { background: #e8f0fc; }
+html.light #log { color: #000; background: #fff; }
+html.light .muted { color: #555; }
+html.light a { color: #1a55b0; }
 </style>
 </head>
 <body>
@@ -297,7 +316,8 @@ const DB = {
 const Settings = {
   v: { worldExplored: true, underworldExplored: false, townsExplored: true, dungeonsExplored: false,   // the original's defaults
        peerExplore: true, worldTitles: true, underworldTitles: false, npcNames: true, partyLocation: true,
-       autoLevelUp: false, qfInterval: 400, qfAim: true, debug: false, debugLog: false, size: 0, hud: true },
+       autoLevelUp: false, qfInterval: 400, qfAim: true, debug: false, debugLog: false, size: 0, hud: true,
+       light: true },   // the page's: black on white (not the original's colours)
   load() { try { Object.assign(this.v, JSON.parse(localStorage.getItem('um5.settings') || '{}')); } catch {} },
   save() { try { localStorage.setItem('um5.settings', JSON.stringify(this.v)); } catch {} },
 };
@@ -1618,8 +1638,12 @@ function updateTitle() {
 
 let lastLoc = [0, 0], lastPeer = null, readFails = 0;
 
+// the page's bright scheme (Window, Bright colours) or the original's dark one
+function applyTheme() { document.documentElement.classList.toggle('light', !!Settings.v.light); }
+
 async function loop() {
   Settings.load();
+  applyTheme();
   await Files.loadCached().catch(() => {});
   const dataUrl = new URLSearchParams(location.search).get('data');
   if (dataUrl) await Files.importUrl(dataUrl).catch(e => console.warn(e));
@@ -1832,6 +1856,8 @@ const Menu = {
         { label: 'Size to 1024', act: () => setSize(1024) }, { label: 'Fit to window', act: () => setSize(0) },
         '-', { label: 'Decrease size', key: 'PgDn', act: () => sizeBy(-16) }, { label: 'Increase size', key: 'PgUp', act: () => sizeBy(16) },
         '-', { label: 'Show HUD', ...chk('hud') },
+        { label: 'Bright colours', checked: s.light, act: () => {
+          s.light = !s.light; Settings.save(); applyTheme(); Lists.force = true; Lists.refresh(); } },
         '-', { label: 'Open in its own window', act: () => window.open(location.href, 'ultimapper5', 'popup,width=1100,height=900') }] },
       '-',
       { label: 'Map exploration', sub: [
@@ -1990,8 +2016,15 @@ const LIST_REAGENTS = ['Sulfur Ash', 'Ginseng', 'Garlic', 'Spider Silk', 'Blood 
 const VERDANA_CELL = [1, 1, 1, 2, 3, 4, 5, 6, [6, 7, 1], [7, 7, 2], 8, 8, 9, 11, 12, 12, 13, 14, 15, 16, 17, 17, 18, 19,
   19, 20, 22, 22, 23, 24, 24, 25, 26, 27, 28, 29, 30, 30, 31, 32, 33, 34, 35, 35, 36, 37, 38, 39, 40, 41, 41];
 
+// the lists' colours in the bright scheme: black on white, the original's order of brightness
+// kept (its brightest the darkest); the effects in ( ) a grey that still reads well
+const LIST_LIGHT = { '#000000': '#FFFFFF', '#222222': '#E4E4E4', '#222266': '#CFE0FA', '#CCCCCC': '#000000',
+  '#AAAAAA': '#111111', '#888888': '#262626', '#555555': '#5A5A5A', '#444444': '#8C8C8C', '#228822': '#147014',
+  '#882222': '#B01C1C' };
+
 const Lists = {
   mode: 0, sel: 0, rows: 0, rects: [], can: [], seen: {}, force: false, idle: 0, pos: null,
+  col(c) { return Settings.v.light ? LIST_LIGHT[c] || c : c; },
   w: 648, h: 776, home: [648, 776],   // the client area (its paint box and bitmap), the first one
   frame: [16, 39],         // the window around it (a fixed window's on Windows 10 / 11): PageUp / PageDown size that
   // Spells / Inventory in the menu, S / I, a click on the HUD's right part: that list, nothing
@@ -2012,7 +2045,7 @@ const Lists = {
     if (!d) {
       d = Dlg.make('lists', '', this.w + 2);
       const body = d.querySelector('.body');
-      Object.assign(body.style, { padding: '0', overflow: 'hidden', background: '#000' });
+      Object.assign(body.style, { padding: '0', overflow: 'hidden', background: 'var(--bg)' });
       const c = el('canvas', { id: 'listsCanvas', width: this.w, height: this.h });
       c.style.display = 'block';
       body.replaceChildren(c);
@@ -2123,7 +2156,7 @@ const Lists = {
     this.force = false;
     if (!changed) return;
     const g = c.getContext('2d');
-    g.fillStyle = '#000000';
+    g.fillStyle = this.col('#000000');
     g.fillRect(0, 0, c.width, c.height);
     if (this.mode) this.drawInventory(g, c.width, c.height); else this.drawSpells(g, c.width, c.height);
     for (const [k, from, n] of [['reagents', 0x2AA, 8], ['items', 0x21A, 112], ['quest', 0x209, 17], ['spells', 0x24A, 48]])
@@ -2144,10 +2177,10 @@ const Lists = {
     const wName = Math.max(...LIST_SPELLS.map(([o]) => tw(SPELLS[o][0]))), wEff = Math.max(...LIST_SPELLS.map(([o]) => tw(SPELLS[o][3])));
     const x0 = Math.trunc((W - w8 - w888 - wName - wEff - 9 * wMan - 7 * wSp - 7 * fh) / 2);
     let y = Math.trunc((H - 50 * fh - 58) / 2);
-    const text = (t, x, colour) => { g.fillStyle = colour; Gdi.text(g, t, x, y); };
+    const text = (t, x, colour) => { g.fillStyle = this.col(colour); Gdi.text(g, t, x, y); };
     const right = (t, x, w, colour) => text(t, x + w - tw(t), colour);
     this.rects = [];
-    g.fillStyle = '#222222';
+    g.fillStyle = this.col('#222222');
     g.fillRect(x0 - half, y, W - 2 * x0 + 2 * half, fh);
     let x = x0;
     text('L', x, '#888888'); x += w8 + fh;
@@ -2178,7 +2211,7 @@ const Lists = {
       this.can[i] = can;
       let colour;
       if (this.sel === i) {
-        g.fillStyle = '#222266';
+        g.fillStyle = this.col('#222266');
         g.fillRect(x0 - half, y, W - 2 * x0 + 2 * half, fh);
         colour = n > 0 ? '#CCCCCC' : '#888888';
       } else colour = n > 0 ? '#AAAAAA' : '#444444';
@@ -2216,7 +2249,7 @@ const Lists = {
     this.rows = 0; this.rects = [];
     const y0 = Math.trunc((H - 44 * fh - 44) / 2);
     let x = Math.trunc((W - 3 * colW) / 2), y = y0, col1 = [0, 0], off = 0x21A;
-    const text = (t, x, colour) => { g.fillStyle = colour; Gdi.text(g, t, x, y); };
+    const text = (t, x, colour) => { g.fillStyle = this.col(colour); Gdi.text(g, t, x, y); };
     const count = (v, x, quest) => {
       const t = v === 0 ? '-' : quest && v === 255 ? '1' : String(v);
       text(t, x + w999 - tw(t), v ? '#CCCCCC' : '#444444');
@@ -3060,7 +3093,7 @@ const LogWin = {
     const d = Dlg.make('logwin', 'Log', 752);
     const body = d.querySelector('.body');
     if (!body.querySelector('#log')) {
-      Object.assign(body.style, { padding: '0', height: '312px', background: '#000' });
+      Object.assign(body.style, { padding: '0', height: '312px', background: 'var(--bg)' });
       const cb = el('input', { type: 'checkbox', checked: !!Settings.v.debugLog,
         onchange: () => { Settings.v.debugLog = cb.checked; Settings.save(); } });
       d.querySelector('header .t').after(el('label', { className: 'muted', title: "The original's debug_log setting" }, cb, ' log'));
