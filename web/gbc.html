@@ -643,6 +643,7 @@ const DATA_VERSION = 6;   // what the parsers below produce; older stored data i
 const Data = {
   games: {},   // game index -> { areas: [...], effects: [Effects.txt lines], xp: {class: [xp per level]}, files: {lowercase name: bytes} }
   urls: {},    // game index -> the folder the webserver serves (files fetched when needed)
+  zip: null,   // the served GBC folder's gbc-data.zip (readZip), when it has one
   exp: null,   // GBC's Data\Experience.dat tables
   async load() {
     for (let g = 0; g < 12; g++) {
@@ -679,9 +680,15 @@ const Data = {
     const d = this.games[g], k = name.toLowerCase();
     if (d?.files && k in d.files) return d.files[k];
     if (!this.urls[g] || !d) return null;
-    const r = await fetch(this.urls[g] + encodeURIComponent(name), { cache: 'no-store' }).catch(() => null);
     d.files ??= {};
-    return d.files[k] = r?.ok ? await r.arrayBuffer() : null;
+    return d.files[k] = await this.served(g, name);
+  },
+  // a file of the game's folder in the served GBC folder: from gbc-data.zip, else
+  // (no zip, or Levels.txt, kept out of it for EDIT LEVELS) fetched; null when not there
+  async served(g, name) {
+    if (this.zip && !/^levels\.txt$/i.test(name)) return this.zip.get(`Games/${GAME_INFO[g].dir}/${name}`);
+    const r = await fetch(this.urls[g] + encodeURIComponent(name), { cache: 'no-store' }).catch(() => null);
+    return r?.ok ? r.arrayBuffer() : null;
   },
   text: async (g, name) => { const b = await Data.file(g, name); return b ? new TextDecoder('latin1').decode(b) : null; },
 };
@@ -2821,12 +2828,52 @@ function toggleDebug() { Settings.v.debug = !Settings.v.debug; Settings.save(); 
 
 /* --------------------------------------------------------- GBC data */
 
+// a zip (the tools' folders keep their data in <tool>-data.zip): its files'
+// names, and get(path) - the bytes, any case, null for a file it hasn't
+async function readZip(buf) {
+  const d = new DataView(buf), u8 = new Uint8Array(buf), files = new Map();
+  let e = buf.byteLength - 22;
+  while (e >= 0 && d.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('Not a zip file');
+  for (let i = 0, p = d.getUint32(e + 16, true); i < d.getUint16(e + 10, true); i++) {
+    const n = d.getUint16(p + 28, true), local = d.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(u8.subarray(p + 46, p + 46 + n));
+    const at = local + 30 + d.getUint16(local + 26, true) + d.getUint16(local + 28, true);
+    files.set(name.toLowerCase(), { name, method: d.getUint16(p + 10, true), data: u8.subarray(at, at + d.getUint32(p + 20, true)) });
+    p += 46 + n + d.getUint16(p + 30, true) + d.getUint16(p + 32, true);
+  }
+  return {
+    names: [...files.values()].map(f => f.name),
+    async get(path) {
+      const f = files.get(path.toLowerCase());
+      if (!f) return null;
+      if (f.method === 0) return f.data.slice().buffer;
+      return new Response(new Blob([f.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer();
+    },
+  };
+}
+// the zip at a URL the webserver serves, null when it isn't there
+async function fetchZip(url) {
+  const r = await fetch(url, { cache: 'no-store' }).catch(() => null);
+  return r?.ok ? readZip(await r.arrayBuffer()) : null;
+}
+// picked files, with the files of a <tool>-data.zip among them added as if
+// they were in its folder (webkitRelativePath, name, arrayBuffer like a File)
+async function withZips(files) {
+  const out = [...files];
+  for (const f of files) if (/-data\.zip$/i.test(f.name)) {
+    const zip = await readZip(await f.arrayBuffer()), dir = f.webkitRelativePath.slice(0, -f.name.length);
+    for (const name of zip.names) out.push({ webkitRelativePath: dir + name, name: name.split('/').at(-1), arrayBuffer: () => zip.get(name) });
+  }
+  return out;
+}
+
 function pickFolder() {
   const inp = $('#folderInput');
   inp.value = '';
   inp.onchange = async () => {
     const byGame = {};
-    for (const f of inp.files) {
+    for (const f of await withZips(inp.files)) {
       const parts = f.webkitRelativePath.split('/');
       // Resources\Character file formats\NN. <game>.txt: the record layouts for the editor
       const fm = parts.at(-2)?.toLowerCase() === 'character file formats' && parts.at(-1).match(/^(\d\d)\. .*\.txt$/i);
@@ -2851,24 +2898,31 @@ function pickFolder() {
   inp.click();
 }
 // ?gbcdata=<GBC folder the webserver serves>: the files every game has; the
-// rest (NPC icons, world maps) are fetched when needed
+// rest (NPC icons, world maps) are taken when needed. They are in the folder's
+// gbc-data.zip (all but the games' Levels.txt), or loose in an unpacked GBC.
 async function importGbcUrl(base) {
   if (!base.endsWith('/')) base += '/';
+  Data.zip = await fetchZip(`${base}gbc-data.zip`);
+  const get = async path => {
+    if (Data.zip) return Data.zip.get(path);
+    const r = await fetch(base + path.split('/').map(encodeURIComponent).join('/'), { cache: 'no-store' }).catch(() => null);
+    return r?.ok ? r.arrayBuffer() : null;
+  };
   for (let g = 0; g < 12; g++) {
-    const dir = `${base}Games/${encodeURIComponent(GAME_INFO[g].dir)}/`, bufs = {};
+    const bufs = {};
+    Data.urls[g] = `${base}Games/${encodeURIComponent(GAME_INFO[g].dir)}/`;
     for (const name of ['Game.dat', 'Effects.txt', 'XP.txt', 'Levels.txt', 'Icons.txt', 'Head.bmp', 'Body.bmp', 'Icon.bmp',
       'Death_1.bmp', 'Death_2.bmp', 'Passwords.txt']) {
-      const r = await fetch(dir + name, { cache: 'no-store' });
-      if (r.ok) bufs[name] = await r.arrayBuffer();
+      const b = await Data.served(g, name);
+      if (b) bufs[name] = b;
     }
-    const fr = await fetch(`${base}Resources/Character%20file%20formats/${encodeURIComponent(GAME_INFO[g].dir)}.txt`, { cache: 'no-store' });
-    if (fr.ok) bufs['format.txt'] = await fr.arrayBuffer();
+    const fb = await get(`Resources/Character file formats/${GAME_INFO[g].dir}.txt`);
+    if (fb) bufs['format.txt'] = fb;
     if (Object.keys(bufs).length) await Data.importGame(g, bufs);
-    Data.urls[g] = dir;
   }
-  const ex = await fetch(`${base}Data/Experience.dat`, { cache: 'no-store' });
-  if (ex.ok) await Data.importExperience(await ex.arrayBuffer());
-  log(`GBC data imported from ${base}`);
+  const ex = await get('Data/Experience.dat');
+  if (ex) await Data.importExperience(ex);
+  log(`GBC data imported from ${base}${Data.zip ? 'gbc-data.zip' : ''}`);
 }
 
 /* ------------------------------------------------------ game folder

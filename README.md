@@ -63,7 +63,13 @@ The eXoDOS patch uses these.
 ### Setting the pages up inside eXoDOS
 
 `exo/patch_exo.py` (needs Python 3.8+) switches an eXoDOS installation on Windows to
-using the pages. It backs up the old files.
+using the pages. It backs up the old launchers. In `util`, it packs the data
+the pages read into one zip per tool (`ASE\ase-data.zip`, `ASE3\ase3-data.zip`,
+`GBC\gbc-data.zip`; GBC's `Levels.txt`, `Music` and Monster Manuals stay loose,
+the manuals with their pictures inside) and removes the rest: the Windows
+tools and what only they use, and `Ultimapper5`. The pages' folder choosers
+and `?gbcdata=` / `?asedata=` take a folder with the zip or with the files
+loose.
 
 ```
 python exo\patch_exo.py [--check | --revert] [--staging FOLDER] <eXo folder>
@@ -74,7 +80,8 @@ and `util` in it.
 - `--staging` is the DOSBox Staging folder to use, relative to the eXo folder
 (default `emulators\dosbox\staging0.83.0`). Put any Staging version >= 0.83 there.
 - `--check` shows what would change.
-- `--revert` undoes the patch.
+- `--revert` undoes the patch, except in `util` (eXoDOS's own util files
+bring the tools back).
 
 ## OPTION 2: The patched tools
 

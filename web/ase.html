@@ -1684,6 +1684,46 @@ function quit() { window.close(); }
 
 /* ------------------------------------------------------ files */
 
+// a zip (the tools' folders keep their data in <tool>-data.zip): its files'
+// names, and get(path) - the bytes, any case, null for a file it hasn't
+async function readZip(buf) {
+  const d = new DataView(buf), u8 = new Uint8Array(buf), files = new Map();
+  let e = buf.byteLength - 22;
+  while (e >= 0 && d.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('Not a zip file');
+  for (let i = 0, p = d.getUint32(e + 16, true); i < d.getUint16(e + 10, true); i++) {
+    const n = d.getUint16(p + 28, true), local = d.getUint32(p + 42, true);
+    const name = new TextDecoder().decode(u8.subarray(p + 46, p + 46 + n));
+    const at = local + 30 + d.getUint16(local + 26, true) + d.getUint16(local + 28, true);
+    files.set(name.toLowerCase(), { name, method: d.getUint16(p + 10, true), data: u8.subarray(at, at + d.getUint32(p + 20, true)) });
+    p += 46 + n + d.getUint16(p + 30, true) + d.getUint16(p + 32, true);
+  }
+  return {
+    names: [...files.values()].map(f => f.name),
+    async get(path) {
+      const f = files.get(path.toLowerCase());
+      if (!f) return null;
+      if (f.method === 0) return f.data.slice().buffer;
+      return new Response(new Blob([f.data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer();
+    },
+  };
+}
+// the zip at a URL the webserver serves, null when it isn't there
+async function fetchZip(url) {
+  const r = await fetch(url, { cache: 'no-store' }).catch(() => null);
+  return r?.ok ? readZip(await r.arrayBuffer()) : null;
+}
+// picked files, with the files of a <tool>-data.zip among them added as if
+// they were in its folder (webkitRelativePath, name, arrayBuffer like a File)
+async function withZips(files) {
+  const out = [...files];
+  for (const f of files) if (/-data\.zip$/i.test(f.name)) {
+    const zip = await readZip(await f.arrayBuffer()), dir = f.webkitRelativePath.slice(0, -f.name.length);
+    for (const name of zip.names) out.push({ webkitRelativePath: dir + name, name: name.split('/').at(-1), arrayBuffer: () => zip.get(name) });
+  }
+  return out;
+}
+
 // the ASE or ASE3 folder (hints, Blocks.dat; level maps, item names) and the
 // game folder (saves, manuals)
 function pickFolder(kind) {
@@ -1693,7 +1733,7 @@ function pickFolder(kind) {
     const files = [...inp.files];
     if (kind === 'ase') {
       let n = 0;
-      for (const f of files) {
+      for (const f of await withZips(files)) {
         const p = f.webkitRelativePath.split('/').slice(1).join('/');
         let m = p.match(/^EOB([12])\/(Hints_\d\d\.txt|Blocks\.dat|Item_(?:List|Name)\.txt|Item_(?:Type|Subtype)\.dat)$/i);
         if (m) { await DB.put('files', `ASE:EOB${m[1]}/${normalAseName(m[2])}`, await f.arrayBuffer()); n++; continue; }
@@ -1810,27 +1850,36 @@ function gameFile(path) {
 
 // ?asedata=<folder> (ASE's) and ?ase3data=<folder> (ASE3's): data from a
 // folder the webserver serves (relative to this page)
+// a file of an ASE or ASE3 folder the webserver serves: from its zip when it
+// has one, else loose; null when it isn't there
+async function servedFile(base, zip, path) {
+  if (zip) return zip.get(path);
+  const r = await fetch(base + path, { cache: 'no-store' }).catch(() => null);
+  return r?.ok ? r.arrayBuffer() : null;
+}
 async function importAseUrl(base) {
   if (!base.endsWith('/')) base += '/';
+  const zip = await fetchZip(base + 'ase-data.zip');
   let n = 0;
   for (const id of [1, 2]) for (const name of ['Blocks.dat', 'Item_List.txt', 'Item_Name.txt', 'Item_Type.dat', 'Item_Subtype.dat',
     ...Array.from({ length: 16 }, (_, i) => `Hints_${pad2(i + 1)}.txt`)]) {
-    const r = await fetch(`${base}EOB${id}/${name}`, { cache: 'no-store' });
-    if (!r.ok) continue;
-    await DB.put('files', `ASE:EOB${id}/${name}`, await r.arrayBuffer()); n++;
+    const b = await servedFile(base, zip, `EOB${id}/${name}`);
+    if (!b) continue;
+    await DB.put('files', `ASE:EOB${id}/${name}`, b); n++;
   }
-  log(`ASE data imported from ${base} (${n} files)`);
+  log(`ASE data imported from ${base}${zip ? 'ase-data.zip' : ''} (${n} files)`);
 }
 async function importAse3Url(base) {
   if (!base.endsWith('/')) base += '/';
+  const zip = await fetchZip(base + 'ase3-data.zip');
   let n = 0;
   for (const name of [...Array.from({ length: 14 }, (_, i) => `Maps/${pad2(i + 1)}.dat`), 'Items.txt']) {
-    const r = await fetch(base + name, { cache: 'no-store' });
-    if (!r.ok) continue;
-    await DB.put('files', 'ASE3:' + name, await r.arrayBuffer()); n++;
+    const b = await servedFile(base, zip, name);
+    if (!b) continue;
+    await DB.put('files', 'ASE3:' + name, b); n++;
   }
   Maps3.cache = {};
-  log(`ASE3 data imported from ${base} (${n} files)`);
+  log(`ASE3 data imported from ${base}${zip ? 'ase3-data.zip' : ''} (${n} files)`);
 }
 // ASE3 kept explored maps in <game>\ASE\Explored_NN.dat (per save slot, 14
 // levels x 1024 bytes, column by column: x * 32 + y)

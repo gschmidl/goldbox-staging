@@ -16,21 +16,28 @@ ultimapper5.html in the default web browser instead of the Windows tools.
 - The Staging folder's resources\\webserver, which Staging serves: the three
   pages, and the links util and eXoDOS (to the eXo folder's util and eXoDOS)
   that give the pages the tools' data and the game folders.
+- util\\ASE, util\\ASE3 and util\\GBC: the data the pages read packed into one
+  zip per folder (ase-data.zip, ase3-data.zip, gbc-data.zip), the Monster
+  Manuals' pictures put into their pages, and the rest - the Windows tools
+  and what only they use - removed, util\\Ultimapper5 with it.
 
 usage: python patch_exo.py [--check | --revert] [--staging FOLDER] EXO_FOLDER
 
 EXO_FOLDER is eXoDOS's "eXo" folder, the one with eXoDOS, emulators and util in
-it. --check shows what would change, --revert undoes it. --staging is the
+it. --check shows what would change, --revert undoes it, apart from util (the
+tools come back with eXoDOS's own util files). --staging is the
 DOSBox Staging folder, relative to the eXo folder (default:
 emulators\\dosbox\\staging0.83.0); it has to be Staging 0.83 or newer, which has
 the webserver.
 """
 import argparse
+import base64
 import os
 import re
 import stat
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -108,7 +115,7 @@ DOSBox Staging serves this folder over its webserver. patch_exo.py put the
 pages here (gbc.html, ase.html, ultimapper5.html), and two links that give
 them the tools' data and the games' files:
 
-  util   -> the eXo folder's util     (GBC, ASE, ASE3)
+  util   -> the eXo folder's util     (GBC, ASE, ASE3: their <tool>-data.zip)
   eXoDOS -> the eXo folder's eXoDOS   (the game folders: saved games, maps)
 
 The launchers' GBC / ASE / Ultimapper options start this DOSBox Staging with
@@ -124,6 +131,22 @@ TOOL = re.compile(r'start\s+\.\\util\\(GBC\\GBC\.exe|ASE3\\ASE3|ASE\\ASE|Ultimap
 PAGE = re.compile(r'start\s+""\s+/b\s+cmd\s+/c\s+\.\\emulators\\dosbox\\gbc_staging_page\.bat\s+(\S+)', re.I)
 KILL = re.compile(r'taskkill\s+/IM\s+(GBC|ASE|ASE3|Ultimapper_5)\.exe$', re.I)
 EXE = re.compile(r'"[^"]*\\dosbox\.exe"|"\.\\emulators\\dosbox\\%dosbox%"', re.I)
+# util's tool folders: (the zip, the files that go in it, the files kept
+# loose) as paths in the folder, any case; the rest goes. Loose: the games'
+# Levels.txt (GBC's EDIT LEVELS), GBC's Music folder (GBC_Audio's sound files,
+# picked in the page) and the Monster Manuals (pages of their own). Nothing of
+# Ultimapper5 is used: ultimapper5.html reads only the game folder.
+PACK = {
+    'ASE': ('ase-data.zip', r'EOB[12]/(Blocks\.dat|Item_List\.txt|Item_Name\.txt|Item_Type\.dat|Item_Subtype\.dat|Hints_\d\d\.txt)', None),
+    'ASE3': ('ase3-data.zip', r'Maps/\d\d\.dat|Items\.txt', None),
+    'GBC': ('gbc-data.zip',
+            r'Data/Experience\.dat|Resources/Character file formats/\d\d\. [^/]*\.txt'
+            r'|Games/[^/]+/(Game\.dat|Effects\.txt|XP\.txt|Icons\.txt|Head\.bmp|Body\.bmp|Icon\.bmp|Death_2\.bmp'
+            r'|Passwords\.txt|World\.bmp|World_\d\d\d\.bmp|[^/]*_1\.bmp)',
+            r'Games/[^/]+/Levels\.txt|Music/.*|Resources/Monster Manuals/[^/]*\.html'),
+    'Ultimapper5': (None, None, None),
+}
+GIF = re.compile(r'(<img\b[^>]*?\bsrc\s*=\s*)"([^":]+\.gif)"', re.I)
 NOTES = {
     'echo Note: Dosbox Staging is not compatible with Gold Box Companion.':
         'echo Note: GBC opens in your web browser, served by DOSBox Staging.',
@@ -349,7 +372,13 @@ class Patcher:
         (Staging serves the first of <working folder>\\webserver,
         <working folder>\\resources\\webserver and its own resources\\webserver,
         and eXo starts it from the eXo folder). One with only the pages, links
-        and notes (README.txt, from an earlier setup) is removed."""
+        and notes (README.txt, from an earlier setup) is removed. Pages in
+        Staging's config folder's webserver are served before all of these:
+        a warning, as they aren't eXo's."""
+        home = os.environ.get('LOCALAPPDATA')
+        if warn and home and any((Path(home) / 'DOSBox' / 'webserver' / n).is_file() for n in PAGES):
+            print(f'warning: {Path(home) / "DOSBox" / "webserver"} has pages that DOSBox Staging serves '
+                  f'instead of {self.rel(self.web)}\'s; move them away')
         for web in (self.exo / 'webserver', self.exo / 'resources' / 'webserver'):
             if not web.is_dir():
                 continue
@@ -362,6 +391,60 @@ class Patcher:
             if (web / 'README.txt').is_file():
                 self.remove(web / 'README.txt')
             self.clear(web, keep_folder=False)
+
+    def manuals(self, folder):
+        """The Monster Manuals' pictures (<img src="NN_xxx/name.gif">) put into
+        their pages as data: URIs; the GIFs then go with the rest."""
+        for page in sorted(folder.glob('*.html')) if folder.is_dir() else ():
+            text = page.read_bytes().decode('latin-1')
+            new = GIF.sub(lambda m: (f'{m.group(1)}"data:image/gif;base64,{base64.b64encode((folder / m.group(2)).read_bytes()).decode()}"'
+                                     if (folder / m.group(2)).is_file() else m.group(0)), text)
+            if new != text:
+                self.say(f'put the pictures into {self.rel(page)}')
+                if not self.check:
+                    page.write_bytes(new.encode('latin-1'))
+
+    def pack(self):
+        """util's tool folders down to what the pages read (PACK)."""
+        util = self.exo / 'util'
+        for tool, (zname, zipped, loose) in PACK.items():
+            root = util / tool
+            if not root.is_dir():
+                continue
+            if tool == 'GBC':
+                self.manuals(root / 'Resources' / 'Monster Manuals')
+            files = {f.relative_to(root).as_posix(): f for f in root.rglob('*') if f.is_file()}
+            add = {p: f for p, f in files.items() if zipped and re.fullmatch(zipped, p, re.I)}
+            if add:
+                zpath = root / zname
+                self.say(f'pack {len(add)} files into {self.rel(zpath)}')
+                if not self.check:
+                    old = {}
+                    if zpath.is_file():   # an earlier zip: what of it isn't loose again is kept
+                        with zipfile.ZipFile(zpath) as z:
+                            old = {n: z.read(n) for n in z.namelist() if n.lower() not in {p.lower() for p in add}}
+                    tmp = zpath.with_name(zname + '.tmp')
+                    with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+                        for n, data in old.items():
+                            z.writestr(n, data)
+                        for p, f in sorted(add.items()):
+                            z.write(f, p)
+                    with zipfile.ZipFile(tmp) as z:
+                        if z.testzip() is not None or any(z.read(p) != f.read_bytes() for p, f in add.items()):
+                            sys.exit(f'{tmp} does not hold what was packed; nothing removed')
+                    tmp.replace(zpath)
+            gone = [f for p, f in files.items() if p != zname and not (loose and re.fullmatch(loose, p, re.I))]
+            if gone:
+                self.say(f'remove {len(gone)} files from {self.rel(root)} (the Windows tool and what only it uses)')
+                if not self.check:
+                    for f in gone:
+                        f.unlink()
+                    # emptied folders go, but not Music's (the sound folders, empty as shipped)
+                    for d in sorted((d for d in root.rglob('*') if d.is_dir()), key=lambda d: -len(d.parts)):
+                        if d.relative_to(root).parts[0].lower() != 'music' and not any(d.iterdir()):
+                            d.rmdir()
+                    if not any(root.iterdir()):
+                        root.rmdir()
 
     def apply(self, pages_dir):
         dbx, before = self.exo / 'emulators' / 'dosbox', set()
@@ -400,6 +483,7 @@ class Patcher:
             else:
                 kind = make_link(link, target)
                 self.say(f'link {self.rel(link)} -> {name} ({kind})')
+        self.pack()
 
     def revert(self):
         dbx, stagings = self.exo / 'emulators' / 'dosbox', {self.staging}
